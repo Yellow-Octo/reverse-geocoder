@@ -3,9 +3,9 @@ import csvParser from "csv-parser";
 import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
 import {Database, knexInstance} from "./Database";
-import unzip from "unzip-stream";
+import unzipper from "unzipper";
 
-const CITIES = "https://download.geonames.org/export/dump/cities15000.zip"
+const CITIES = "https://download.geonames.org/export/dump/cities500.zip"
 const ADMIN_1 = "https://download.geonames.org/export/dump/admin1CodesASCII.txt"
 const ADMIN_2 = "https://download.geonames.org/export/dump/admin2Codes.txt"
 
@@ -48,7 +48,6 @@ const whitelistCityColumns = new Set([
   "admin2Code",
   "admin3Code",
   "admin4Code",
-  "population",
   "modificationDate"
 ])
 
@@ -87,26 +86,31 @@ export class ReverseGeocoder {
 
   loadCities = async () => {
     const stream = await openWebFileStream(CITIES)
-    stream
-      .pipe(unzip.Parse())
-      .pipe(csvParser({
-        separator: "\t",
-        headers: ["geonameid", "name", "asciiname", "alternatenames", "latitude", "longitude", "featureClass", "featureCode", "countryCode", "cc2", "admin1Code", "admin2Code", "admin3Code", "admin4Code", "population", "elevation", "dem", "timezone", "modificationDate"]
-      }))
-      .pipe(new BatchStream(50, {objectMode: true}))
-      .pipe(new AsyncWorkStream<CityType[]>(async (batch) => {
-        //delete any keys that aren't in the whitelist
-        batch.forEach((city) => {
-          Object.keys(city).forEach((key) => {
-            if (!whitelistCityColumns.has(key)) {
-              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-              // @ts-ignore
-              delete city[key]
-            }
+    return new Promise((resolve, reject) => {
+      stream
+        .pipe(unzipper.ParseOne())
+        .pipe(csvParser({
+          separator: "\t",
+          headers: ["geonameid", "name", "nameAscii", "alternatenames", "latitude", "longitude", "featureClass", "featureCode", "countryCode", "cc2", "admin1Code", "admin2Code", "admin3Code", "admin4Code", "population", "elevation", "dem", "timezone", "modificationDate"]
+        }))
+        .pipe(new BatchStream(50, {objectMode: true}))
+        .pipe(new AsyncWorkStream<CityType[]>(async (batch) => {
+          //delete any keys that aren't in the whitelist
+          batch.forEach((city) => {
+            Object.keys(city).forEach((key) => {
+              if (!whitelistCityColumns.has(key)) {
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                delete city[key]
+              }
+            })
           })
-        })
-        await knexInstance.batchInsert('cities', batch)
-      }))
+          await knexInstance.batchInsert('cities', batch)
+        }))
+        .on('finish', resolve)
+        .on('error', reject)
+    })
+
   }
 }
 
@@ -114,8 +118,10 @@ export class ReverseGeocoder {
   await Database.clearData()
   const reverseGeocoder = new ReverseGeocoder()
   await reverseGeocoder.loadAdmin1Codes()
-  console.log("Admin1 codes loaded")
+  console.log("loaded admin1 codes")
   await reverseGeocoder.loadAdmin2Codes()
-  console.log("Admin2 codes loaded")
+  console.log("loaded admin2 codes")
+  await reverseGeocoder.loadCities()
+  console.log("loaded cities")
 })()
 
