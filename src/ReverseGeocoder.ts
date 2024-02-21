@@ -4,7 +4,6 @@ import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
 import {Database, knexInstance} from "./Database";
 import unzipper from "unzipper";
-import {Knex} from "knex";
 
 const CITIES = "https://download.geonames.org/export/dump/cities500.zip"
 const ADMIN_1 = "https://download.geonames.org/export/dump/admin1CodesASCII.txt"
@@ -33,7 +32,7 @@ type CityType = {
   admin4Code: string
   population: string
   modificationDate: string
-  point?: Knex.Raw
+  point?: any
 }
 
 const whitelistCityColumns = new Set([
@@ -110,7 +109,7 @@ export class ReverseGeocoder {
           separator: "\t",
           headers: ["geonameid", "name", "nameAscii", "alternatenames", "latitude", "longitude", "featureClass", "featureCode", "countryCode", "cc2", "admin1Code", "admin2Code", "admin3Code", "admin4Code", "population", "elevation", "dem", "timezone", "modificationDate"]
         }))
-        .pipe(new BatchStream(50, {objectMode: true}))
+        .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<CityType[]>(async (batch) => {
           //delete any keys that aren't in the whitelist
           batch.forEach((city) => {
@@ -120,7 +119,8 @@ export class ReverseGeocoder {
                 // @ts-ignore
                 delete city[key]
               }
-              city.point = knexInstance.raw(`MakePoint(?, ?, 4326)`, [city.longitude, city.latitude]);
+              // city.point = knexInstance.raw(`MakePoint(?, ?, 4326)`, [city.longitude, city.latitude]); //doesn't fucking work
+              // city.point = `MakePoint(${city.latitude}, ${city.longitude}, 4326)` //also doesn't fucking work
             })
           })
           await knexInstance.batchInsert('cities', batch)
@@ -133,12 +133,11 @@ export class ReverseGeocoder {
 }
 
 (async () => {
-  await Database.clearData()
   const reverseGeocoder = new ReverseGeocoder()
-  // await reverseGeocoder.loadAdmin1Codes()
-  // console.log("loaded admin1 codes")
-  // await reverseGeocoder.loadAdmin2Codes()
-  // console.log("loaded admin2 codes")
+  await reverseGeocoder.loadAdmin1Codes()
+  console.log("loaded admin1 codes")
+  await reverseGeocoder.loadAdmin2Codes()
+  console.log("loaded admin2 codes")
   await reverseGeocoder.loadCities()
   console.log("loaded cities")
 })()

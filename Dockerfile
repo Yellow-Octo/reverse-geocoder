@@ -22,9 +22,11 @@ RUN yarn install --production
 # Bundle app source
 COPY src/ ./src
 
+RUN yarn build
+
 ARG PORT=3000
 ENV PORT $PORT
 EXPOSE $PORT 9229 9230
 
 # Define the command to run your app using CMD which defines your runtime
-CMD [ "node", "src/index.js" ]
+CMD [ "node", "./src/dist/index.js" ]

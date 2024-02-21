@@ -21,8 +21,9 @@ export async function up(knex: Knex): Promise<void> {
 
   // Check if the spatial_ref_sys table exists and has entries
   const spatialRefSysTableExists = await knex.raw(`
-    SELECT count(*) AS count FROM sqlite_master
-    WHERE type='table' AND name='spatial_ref_sys'
+    SELECT count(*) AS count
+    FROM sqlite_master
+    WHERE type ='table' AND name ='spatial_ref_sys'
   `).then(result => result[0].count > 0);
 
   if (!spatialRefSysTableExists) {
@@ -34,7 +35,7 @@ export async function up(knex: Knex): Promise<void> {
 
 export async function down(knex: Knex): Promise<void> {
   await knex.raw(`SELECT DisableSpatialIndex('${TABLE_NAME}', 'point')`);
-  await knex.raw(`DROP TABLE idx_${TABLE_NAME}_point`);
+  await knex.raw(`DROP TABLE idx_${TABLE_NAME}_point;`);
   // avoids `AddGeometryColumn() error: "UNIQUE constraint failed: geometry_columns.f_table_name, geometry_columns.f_geometry_column"`
   await knex.raw(`SELECT DiscardGeometryColumn('${TABLE_NAME}', 'point')`);
   await knex.schema.dropTableIfExists(TABLE_NAME)
