@@ -55,6 +55,22 @@ const BATCH_SIZE = 100
 
 export class ReverseGeocoder {
 
+  static get = async (lat: number, lng: number, _language: string | null) => {
+    const result = await knexInstance.raw(`
+    SELECT
+      cities.name as city,
+      cities.latitude,
+      cities.longitude,
+      admin1.name as admin1,
+      admin2.name as admin2
+    FROM cities
+    JOIN admin1 ON cities.admin1Code = admin1.code
+    JOIN admin2 ON cities.admin2Code = admin2.code
+    WHERE PtDistWithin(MakePoint(${lng}, ${lat}), MakePoint(cities.longitude, cities.latitude), 1000)
+    LIMIT 1
+  `)
+    return result.rows[0]
+  }
   loadAdmin1Codes = async () => {
     const stream = await openWebFileStream(ADMIN_1)
     return new Promise<void>((resolve, reject) => {
