@@ -6,11 +6,9 @@ export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable(TABLE_NAME, (table) => {
     table.integer('geoNameId').index()
     table.string('name')
-    table.string('nameAscii')
     table.string('alternateNames')
     table.float('latitude')
     table.float('longitude')
-    // table.specificType('point', 'GEOMETRY(Point, 4326)').index()
     table.string('featureClass')
     table.string('featureCode')
     table.string('countryCode')
@@ -21,15 +19,24 @@ export async function up(knex: Knex): Promise<void> {
     table.datetime('modificationDate')
   })
 
-  await knex.raw("SELECT InitSpatialMetaData();")
-  // Assuming SpatiaLite is loaded, use raw SQL to add the spatial column
+  // Check if the spatial_ref_sys table exists and has entries
+  const spatialRefSysTableExists = await knex.raw(`
+    SELECT count(*) AS count FROM sqlite_master
+    WHERE type='table' AND name='spatial_ref_sys'
+  `).then(result => result[0].count > 0);
+
+  if (!spatialRefSysTableExists) {
+    await knex.raw("SELECT InitSpatialMetaData()")
+  }
   await knex.raw(`SELECT AddGeometryColumn('${TABLE_NAME}', 'point', 4326, 'POINT', 2)`);
-  // Optionally, create a spatial index on the 'point' column
   await knex.raw(`SELECT CreateSpatialIndex('${TABLE_NAME}', 'point')`);
-  console.log("point column added")
 }
 
 export async function down(knex: Knex): Promise<void> {
-  return knex.schema.dropTableIfExists(TABLE_NAME)
+  await knex.raw(`SELECT DisableSpatialIndex('${TABLE_NAME}', 'point')`);
+  await knex.raw(`DROP TABLE idx_${TABLE_NAME}_point`);
+  // avoids `AddGeometryColumn() error: "UNIQUE constraint failed: geometry_columns.f_table_name, geometry_columns.f_geometry_column"`
+  await knex.raw(`SELECT DiscardGeometryColumn('${TABLE_NAME}', 'point')`);
+  await knex.schema.dropTableIfExists(TABLE_NAME)
 }
 
