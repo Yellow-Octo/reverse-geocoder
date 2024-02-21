@@ -17,6 +17,9 @@
     "my-cli-tool": "./dist/esbuild/cli.js"
   },
   "scripts": {
+    "refresh": "yarn rollback && yarn migrate",
+    "rollback": "npx knex migrate:rollback --all --knexfile src/knexfile",
+    "migrate": "npx knex migrate:latest --knexfile src/knexfile",
     "cli": "ts-node src/cli.ts",
     "lint": "eslint src/ --ext .js,.jsx,.ts,.tsx",
     "test": "jest",

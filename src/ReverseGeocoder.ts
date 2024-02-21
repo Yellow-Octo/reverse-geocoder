@@ -4,6 +4,7 @@ import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
 import {Database, knexInstance} from "./Database";
 import unzipper from "unzipper";
+import {Knex} from "knex";
 
 const CITIES = "https://download.geonames.org/export/dump/cities500.zip"
 const ADMIN_1 = "https://download.geonames.org/export/dump/admin1CodesASCII.txt"
@@ -32,6 +33,7 @@ type CityType = {
   admin4Code: string
   population: string
   modificationDate: string
+  point?: Knex.Raw
 }
 
 const whitelistCityColumns = new Set([
@@ -97,7 +99,6 @@ export class ReverseGeocoder {
         .on('finish', resolve)
         .on('error', reject)
     })
-
   }
 
   loadCities = async () => {
@@ -119,6 +120,7 @@ export class ReverseGeocoder {
                 // @ts-ignore
                 delete city[key]
               }
+              city.point = knexInstance.raw(`MakePoint(?, ?, 4326)`, [city.longitude, city.latitude]);
             })
           })
           await knexInstance.batchInsert('cities', batch)
@@ -133,10 +135,10 @@ export class ReverseGeocoder {
 (async () => {
   await Database.clearData()
   const reverseGeocoder = new ReverseGeocoder()
-  await reverseGeocoder.loadAdmin1Codes()
-  console.log("loaded admin1 codes")
-  await reverseGeocoder.loadAdmin2Codes()
-  console.log("loaded admin2 codes")
+  // await reverseGeocoder.loadAdmin1Codes()
+  // console.log("loaded admin1 codes")
+  // await reverseGeocoder.loadAdmin2Codes()
+  // console.log("loaded admin2 codes")
   await reverseGeocoder.loadCities()
   console.log("loaded cities")
 })()
