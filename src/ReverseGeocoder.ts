@@ -35,23 +35,6 @@ type CityType = {
   point?: any
 }
 
-const whitelistCityColumns = new Set([
-  "geonameid",
-  "name",
-  "asciiname",
-  "alternatenames",
-  "latitude",
-  "longitude",
-  "featureClass",
-  "featureCode",
-  "countryCode",
-  "admin1Code",
-  "admin2Code",
-  "admin3Code",
-  "admin4Code",
-  "modificationDate"
-])
-
 const BATCH_SIZE = 100
 
 export class ReverseGeocoder {
@@ -112,33 +95,40 @@ export class ReverseGeocoder {
         .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<CityType[]>(async (batch) => {
           //delete any keys that aren't in the whitelist
+          const toInsert: any = []
           batch.forEach((city) => {
-            Object.keys(city).forEach((key) => {
-              if (!whitelistCityColumns.has(key)) {
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                delete city[key]
-              }
-              // city.point = knexInstance.raw(`MakePoint(?, ?, 4326)`, [city.longitude, city.latitude]); //doesn't fucking work
-              // city.point = `MakePoint(${city.latitude}, ${city.longitude}, 4326)` //also doesn't fucking work
+            const latFloat = parseFloat(city.latitude)
+            const lngFloat = parseFloat(city.longitude)
+            if (isNaN(latFloat) || isNaN(lngFloat)) {
+              return
+            }
+            toInsert.push({
+              geoNameId: city.geonameid,
+              name: city.name,
+              alternateNames: city.alternatenames,
+              countryCode: city.countryCode,
+              admin1Code: city.admin1Code,
+              admin2Code: city.admin2Code,
+              point: knexInstance.raw(`MakePoint(?, ?, 4326)`, [latFloat, lngFloat]),
+              modificationDate: new Date(city.modificationDate).toISOString()
             })
           })
-          await knexInstance.batchInsert('cities', batch)
+          await knexInstance.batchInsert('cities', toInsert)
         }))
         .on('finish', resolve)
         .on('error', reject)
     })
-
   }
 }
 
 (async () => {
   const reverseGeocoder = new ReverseGeocoder()
-  await reverseGeocoder.loadAdmin1Codes()
-  console.log("loaded admin1 codes")
-  await reverseGeocoder.loadAdmin2Codes()
-  console.log("loaded admin2 codes")
+  // await reverseGeocoder.loadAdmin1Codes()
+  // console.log("loaded admin1 codes")
+  // await reverseGeocoder.loadAdmin2Codes()
+  // console.log("loaded admin2 codes")
   await reverseGeocoder.loadCities()
-  console.log("loaded cities")
+  // console.log("loaded cities")
+  // await reverseGeocoder.insertCityTest()
 })()
 
