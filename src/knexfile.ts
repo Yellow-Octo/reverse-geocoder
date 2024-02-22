@@ -13,14 +13,11 @@ export default {
   },
   pool: {
     afterCreate: (conn, done) => {
-      conn.loadExtension('mod_spatialite', (err : Error) => {
-        if (err) {
-          console.error('Failed to load Spatialite extension:', err);
-          done(err, conn);
-        } else {
-          console.log('Spatialite extension loaded successfully.');
-          done(null, conn); // proceed with the connection
-        }
+      conn.loadExtension('mod_spatialite', (err: Error) => {
+        if (!err) return done(null, conn);
+
+        console.error('Failed to load Spatialite extension:', err);
+        done(err, conn);
       });
     }
   }

@@ -28,7 +28,6 @@ export async function up(knex: Knex): Promise<void> {
   await knex.raw(`SELECT AddGeometryColumn('${TABLE_NAME}', 'point', 4326, 'POINT', 2)`);
   await knex.raw(`SELECT CreateSpatialIndex('${TABLE_NAME}', 'point')`);
 }
-
 export async function down(knex: Knex): Promise<void> {
   await knex.raw(`SELECT DisableSpatialIndex('${TABLE_NAME}', 'point')`);
   await knex.raw(`DROP TABLE idx_${TABLE_NAME}_point;`);

@@ -2,10 +2,16 @@ import {openWebFileStream} from "./helpers";
 import csvParser from "csv-parser";
 import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
-import {Database, knexInstance} from "./Database";
+import {knexInstance} from "./Database";
 import unzipper from "unzipper";
+import {CITY_SIZE} from "./enums/CITY_SIZE";
+import {ProgressBarStream} from "./streams/ProgressBarStream";
 
-const CITIES = "https://download.geonames.org/export/dump/cities500.zip"
+const CITIES_500 = "https://download.geonames.org/export/dump/cities500.zip"
+const CITIES_1000 = "https://download.geonames.org/export/dump/cities1000.zip"
+const CITIES_5000 = "https://download.geonames.org/export/dump/cities5000.zip"
+const CITIES_15000 = "https://download.geonames.org/export/dump/cities15000.zip"
+
 const ADMIN_1 = "https://download.geonames.org/export/dump/admin1CodesASCII.txt"
 const ADMIN_2 = "https://download.geonames.org/export/dump/admin2Codes.txt"
 
@@ -37,9 +43,19 @@ type CityType = {
 
 const BATCH_SIZE = 100
 
-export class ReverseGeocoder {
+const DEFAULT_OPTIONS = {
+  smallestCitySize: CITY_SIZE.c500,
+}
 
-  static get = async (lat: number, lng: number, _language: string | null) => {
+export class ReverseGeocoder {
+  private smallestCitySize: number;
+
+  constructor(options = {}) {
+    const combinedOptions = {...DEFAULT_OPTIONS, ...options}
+    this.smallestCitySize = combinedOptions.smallestCitySize
+  }
+
+  static get = async (lat: number, lng: number, language: string | null) => {
     const result = await knexInstance.raw(`
     SELECT
       cities.name as city,
@@ -57,8 +73,11 @@ export class ReverseGeocoder {
   }
   loadAdmin1Codes = async () => {
     const stream = await openWebFileStream(ADMIN_1)
+    const totalLength = parseInt(stream.headers["content-length"]!)
+
     return new Promise<void>((resolve, reject) => {
       stream
+        .pipe(new ProgressBarStream(totalLength))
         .pipe(csvParser({separator: "\t", headers: ["id", "name", "nameAscii", "geonameId"]}))
         .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<AdminType[]>(async (batch) => {
@@ -71,8 +90,11 @@ export class ReverseGeocoder {
 
   loadAdmin2Codes = async () => {
     const stream = await openWebFileStream(ADMIN_2)
+    const totalLength = parseInt(stream.headers["content-length"]!)
+
     return new Promise((resolve, reject) => {
       stream
+        .pipe(new ProgressBarStream(totalLength))
         .pipe(csvParser({separator: "\t", headers: ["id", "name", "nameAscii", "geonameId"]}))
         .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<AdminType[]>(async (batch) => {
@@ -84,9 +106,29 @@ export class ReverseGeocoder {
   }
 
   loadCities = async () => {
-    const stream = await openWebFileStream(CITIES)
+    const {smallestCitySize} = this
+    if (smallestCitySize <= CITY_SIZE.c500) {
+      console.log("loading cities 500")
+      await this.loadCityZip(CITIES_500)
+    } else if (smallestCitySize <= CITY_SIZE.c1000) {
+      console.log("loading cities 1000")
+      await this.loadCityZip(CITIES_1000)
+    } else if (smallestCitySize <= CITY_SIZE.c5000) {
+      console.log("loading cities 5000")
+      await this.loadCityZip(CITIES_5000)
+    } else if (smallestCitySize <= CITY_SIZE.c15000) {
+      console.log("loading cities 15000")
+      await this.loadCityZip(CITIES_15000)
+    }
+  }
+
+  loadCityZip = async (url: string) => {
+    const stream = await openWebFileStream(url)
+    const totalLength = parseInt(stream.headers["content-length"]!)
+
     return new Promise((resolve, reject) => {
       stream
+        .pipe(new ProgressBarStream(totalLength))
         .pipe(unzipper.ParseOne())
         .pipe(csvParser({
           separator: "\t",
@@ -109,7 +151,7 @@ export class ReverseGeocoder {
               countryCode: city.countryCode,
               admin1Code: city.admin1Code,
               admin2Code: city.admin2Code,
-              point: knexInstance.raw(`MakePoint(?, ?, 4326)`, [latFloat, lngFloat]),
+              point: knexInstance.raw(`MakePoint(?, ?, 4326)`, [lngFloat, latFloat]),
               modificationDate: new Date(city.modificationDate).toISOString()
             })
           })
@@ -122,13 +164,14 @@ export class ReverseGeocoder {
 }
 
 (async () => {
-  const reverseGeocoder = new ReverseGeocoder()
-  // await reverseGeocoder.loadAdmin1Codes()
-  // console.log("loaded admin1 codes")
-  // await reverseGeocoder.loadAdmin2Codes()
-  // console.log("loaded admin2 codes")
+  const reverseGeocoder = new ReverseGeocoder({smallestCitySize: CITY_SIZE.c500})
+  console.log("loading admin1 codes")
+  await reverseGeocoder.loadAdmin1Codes()
+
+  console.log("loading admin2 codes")
+  await reverseGeocoder.loadAdmin2Codes()
+
+  console.log("loading cities")
   await reverseGeocoder.loadCities()
-  // console.log("loaded cities")
-  // await reverseGeocoder.insertCityTest()
 })()
 
