@@ -1,84 +1,72 @@
-import {openWebFileStream} from "./helpers/helpers";
-import csvParser from "csv-parser";
+import {getWebOrFileStreamWithSize} from "./helpers/helpers";
 import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
 import {knexInstance} from "./Database";
 import unzipper from "unzipper";
-import {CITY_SIZE} from "./enums/CITY_SIZE";
 import {ProgressBarStream} from "./streams/ProgressBarStream";
+import {Stream} from "node:stream";
+import path from "path";
+import {parse} from 'fast-csv';
+import {AdminType, CityType} from "./types/types";
 
-const CITIES_500 = "https://download.geonames.org/export/dump/cities500.zip"
-const CITIES_1000 = "https://download.geonames.org/export/dump/cities1000.zip"
-const CITIES_5000 = "https://download.geonames.org/export/dump/cities5000.zip"
-const CITIES_15000 = "https://download.geonames.org/export/dump/cities15000.zip"
-
-const ADMIN_1 = "https://download.geonames.org/export/dump/admin1CodesASCII.txt"
-const ADMIN_2 = "https://download.geonames.org/export/dump/admin2Codes.txt"
-
-type AdminType = {
-  code: string
-  name: string
-  nameAscii: string
-  geonameId: string
-}
-
-type CityType = {
-  geonameid: string
-  name: string
-  asciiname: string
-  alternatenames: string
-  latitude: string
-  longitude: string
-  featureClass: string
-  featureCode: string
-  countryCode: string
-  admin1Code: string
-  admin2Code: string
-  admin3Code: string
-  admin4Code: string
-  population: string
-  modificationDate: string
-  point?: any
-}
-
-const BATCH_SIZE = 100
+const BATCH_SIZE = 500
 
 const DEFAULT_OPTIONS = {
-  smallestCitySize: CITY_SIZE.c500,
+  // admin1Remote: "https://download.geonames.org/export/dump/admin1CodesASCII.txt",
+  // admin2Remote: "https://download.geonames.org/export/dump/admin2Codes.txt",
+  // citiesRemote: "https://download.geonames.org/export/dump/cities500.zip",
+  admin1Local: path.join(__dirname, "/downloads/admin1CodesASCII.txt"), // 3,885 real lines,  3,885 inserted
+  admin2Local: path.join(__dirname, "/downloads/admin2Codes.txt"), //45784 real lines , 34,382 when inserted
+  citiesLocal: path.join(__dirname, "/downloads/cities500.zip"), //
+}
+
+type OptionsType = {
+  admin1Remote?: string
+  admin2Remote?: string
+  citiesRemote?: string
+  admin1Local?: string
+  admin2Local?: string
+  citiesLocal?: string
 }
 
 export class ReverseGeocoder {
-  private smallestCitySize: number;
+  private readonly options: OptionsType
 
   constructor(options = {}) {
-    const combinedOptions = {...DEFAULT_OPTIONS, ...options}
-    this.smallestCitySize = combinedOptions.smallestCitySize
+    this.options = {...DEFAULT_OPTIONS, ...options}
   }
 
-  static get = async (lat: number, lng: number, language: string | null) => {
-    const result = await knexInstance.raw(`
-    SELECT
-      cities.name as city,
-      cities.latitude,
-      cities.longitude,
-      admin1.name as admin1,
-      admin2.name as admin2
-    FROM cities
-    JOIN admin1 ON cities.admin1Code = admin1.code
-    JOIN admin2 ON cities.admin2Code = admin2.code
-    WHERE PtDistWithin(MakePoint(${lng}, ${lat}), MakePoint(cities.longitude, cities.latitude), 1000)
-    LIMIT 1
-  `)
-    return result.rows[0]
-  }
-  loadAdmin1Codes = async () => {
-    const stream = await openWebFileStream(ADMIN_1)
-    const totalLength = parseInt(stream.headers["content-length"]!)
+  run = async () => {
+    const {admin1Local, admin2Local, citiesLocal, admin1Remote, admin2Remote, citiesRemote} = this.options
 
+    const [admin1Stream, admin1Size] = await getWebOrFileStreamWithSize((admin1Local || admin1Remote)!)
+    const [admin2Stream, admin2Size] = await getWebOrFileStreamWithSize((admin2Local || admin2Remote)!)
+    const [citiesStream, citiesSize] = await getWebOrFileStreamWithSize((citiesLocal || citiesRemote)!)
+
+    if (admin1Remote) {
+      console.log("Downloading admin1")
+    } else {
+      console.log("Using local admin1")
+    }
+    await this.loadAdmin1Codes(admin1Stream.pipe(new ProgressBarStream(admin1Size)))
+    if (admin2Remote) {
+      console.log("Downloading admin2")
+    } else {
+      console.log("Using local admin2")
+    }
+    await this.loadAdmin2Codes(admin2Stream.pipe(new ProgressBarStream(admin2Size)))
+    if (citiesRemote) {
+      console.log("Downloading cities")
+    } else {
+      console.log("Using local cities")
+    }
+    await this.loadCityZip(citiesStream.pipe(new ProgressBarStream(citiesSize)))
+  }
+
+  loadAdmin1Codes = async (csvStream: Stream) => {
     return new Promise<void>((resolve, reject) => {
-      stream
-        .pipe(new ProgressBarStream(totalLength))
-        .pipe(csvParser({separator: "\t", headers: ["id", "name", "nameAscii", "geonameId"]}))
+      csvStream
+        .pipe(parse({delimiter: "\t", headers: ["id", "name", "nameAscii", "geonameId"]}))
         .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<AdminType[]>(async (batch) => {
           await knexInstance.batchInsert('admin1', batch)
@@ -88,55 +76,33 @@ export class ReverseGeocoder {
     })
   }
 
-  loadAdmin2Codes = async () => {
-    const stream = await openWebFileStream(ADMIN_2)
-    const totalLength = parseInt(stream.headers["content-length"]!)
-
-    return new Promise((resolve, reject) => {
-      stream
-        .pipe(new ProgressBarStream(totalLength))
-        .pipe(csvParser({separator: "\t", headers: ["id", "name", "nameAscii", "geonameId"]}))
+  loadAdmin2Codes = async (csvStream: Stream) => {
+    return new Promise<void>((resolve, reject) => {
+      csvStream
+        .pipe(parse({headers: ["id", "name", "nameAscii", "geonameId"], delimiter: '\t'}))
         .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<AdminType[]>(async (batch) => {
           await knexInstance.batchInsert('admin2', batch)
         }))
-        .on('finish', resolve)
+        .on('finish', () => {
+          resolve()
+        })
         .on('error', reject)
     })
   }
 
-  loadCities = async () => {
-    const {smallestCitySize} = this
-    if (smallestCitySize <= CITY_SIZE.c500) {
-      console.log("loading cities 500")
-      await this.loadCityZip(CITIES_500)
-    } else if (smallestCitySize <= CITY_SIZE.c1000) {
-      console.log("loading cities 1000")
-      await this.loadCityZip(CITIES_1000)
-    } else if (smallestCitySize <= CITY_SIZE.c5000) {
-      console.log("loading cities 5000")
-      await this.loadCityZip(CITIES_5000)
-    } else if (smallestCitySize <= CITY_SIZE.c15000) {
-      console.log("loading cities 15000")
-      await this.loadCityZip(CITIES_15000)
-    }
-  }
-
-  loadCityZip = async (url: string) => {
-    const stream = await openWebFileStream(url)
-    const totalLength = parseInt(stream.headers["content-length"]!)
-
+  loadCityZip = async (zipStream: Stream) => {
     return new Promise((resolve, reject) => {
-      stream
-        .pipe(new ProgressBarStream(totalLength))
+      zipStream
         .pipe(unzipper.ParseOne())
-        .pipe(csvParser({
-          separator: "\t",
-          headers: ["geonameid", "name", "nameAscii", "alternatenames", "latitude", "longitude", "featureClass", "featureCode", "countryCode", "cc2", "admin1Code", "admin2Code", "admin3Code", "admin4Code", "population", "elevation", "dem", "timezone", "modificationDate"]
+        .pipe(parse({
+          delimiter: "\t",
+          headers: ["geonameid", "name", "nameAscii", "alternatenames", "latitude", "longitude", "featureClass",
+            "featureCode", "countryCode", "cc2", "admin1Code", "admin2Code", "admin3Code", "admin4Code", "population",
+            "elevation", "dem", "timezone", "modificationDate"]
         }))
         .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<CityType[]>(async (batch) => {
-          //delete any keys that aren't in the whitelist
           const toInsert: any = []
           batch.forEach((city) => {
             const latFloat = parseFloat(city.latitude)
@@ -164,14 +130,8 @@ export class ReverseGeocoder {
 }
 
 (async () => {
-  const reverseGeocoder = new ReverseGeocoder({smallestCitySize: CITY_SIZE.c500})
-  console.log("loading admin1 codes")
-  await reverseGeocoder.loadAdmin1Codes()
-
-  console.log("loading admin2 codes")
-  await reverseGeocoder.loadAdmin2Codes()
-
-  console.log("loading cities")
-  await reverseGeocoder.loadCities()
+  const reverseGeocoder = new ReverseGeocoder()
+  await reverseGeocoder.run()
+  console.log("done!")
 })()
 
