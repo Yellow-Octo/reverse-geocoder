@@ -1,4 +1,4 @@
-import {openWebFileStream} from "./helpers";
+import {openWebFileStream} from "./helpers/helpers";
 import csvParser from "csv-parser";
 import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
