@@ -1,15 +1,18 @@
-import {Transform} from "stream";
+import {Transform, TransformOptions} from "stream";
+
+type CombinedOptions = {
+  newLineCharacter?: string;
+} & TransformOptions;
 
 export class LineStream extends Transform {
   private chunks: any[];
   private newLineCharacter: string;
 
-  constructor(options = {
-    newLineCharacter: '\n'
-  }) {
-    super({...options, readableObjectMode: true});
+  constructor(options: CombinedOptions) {
+    const {newLineCharacter, ...rest} = options;
+    super({...rest, readableObjectMode: true});
     this.chunks = [];
-    this.newLineCharacter = options.newLineCharacter
+    this.newLineCharacter = newLineCharacter || '\n';
   }
 
   _transform(chunk, _encoding, callback) {

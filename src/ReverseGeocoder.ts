@@ -10,6 +10,8 @@ import {parse} from 'fast-csv';
 import {AdminType, AlternateNameType, CityType} from "./types/types";
 import {isLanguageCode} from "./helpers/isLanguageCode";
 import * as fs from "fs";
+import {CsvParser} from "./streams/CsvParser";
+import {LineStream} from "./streams/LineStream";
 
 const BATCH_SIZE = 500
 
@@ -155,6 +157,8 @@ export class ReverseGeocoder {
   }
 
   testCSV = async () => {
+    const HEADERS = ["alternateNameId", "geonameid", "isolanguage", "alternateName", "isPreferredName", "isShortName",
+      "isColloquial", "isHistoric"]
     const fileSize = await fs.promises.stat(path.join(__dirname, "/downloads/alternateNames.zip")).then((stats) => stats.size)
     return new Promise((resolve, reject) => {
       fs.createReadStream(path.join(__dirname, "/downloads/alternateNames.zip"))
@@ -162,8 +166,7 @@ export class ReverseGeocoder {
         .pipe(unzipper.ParseOne(/alternateNames/)) //17s with unzip
         .pipe(parse({
           delimiter: "\t",
-          headers: ["alternateNameId", "geonameid", "isolanguage", "alternateName", "isPreferredName", "isShortName",
-            "isColloquial", "isHistoric"],
+          headers: HEADERS,
         })) //215 FUCKING SECONDS WTF with csv parsing
         .pipe(new Writable({
           objectMode: true,
