@@ -14,7 +14,7 @@ export class ProgressBarStream extends Transform {
 
   _transform(chunk: any, _encoding: BufferEncoding, callback: TransformCallback) {
     this.current += chunk.length;
-    this.progressBar.update(this.current / this.total);
+    this.progressBar.update(this.current);
     this.push(chunk);
     callback();
   }
