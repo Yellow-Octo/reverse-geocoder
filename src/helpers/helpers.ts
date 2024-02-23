@@ -21,6 +21,6 @@ export async function getWebOrFileStreamWithSize(pathOrURL: string): Promise<[st
     return [webStream, parseInt(contentLength)]
   } else {
     const fileSize = await fs.promises.stat(pathOrURL).then((stats) => stats.size)
-    return [fs.createReadStream(pathOrURL), fileSize]
+    return [fs.createReadStream(pathOrURL, {highWaterMark : 256 * 1024}), fileSize]
   }
 }
