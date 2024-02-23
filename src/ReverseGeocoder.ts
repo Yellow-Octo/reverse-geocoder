@@ -36,6 +36,10 @@ export class ReverseGeocoder {
     this.options = {...DEFAULT_OPTIONS, ...options}
   }
 
+  get = async (lat: number, lng: number, language?: string) => {
+    const result = await knexInstance.raw(``)
+  }
+
   run = async () => {
     const {admin1Local, admin2Local, citiesLocal, admin1Remote, admin2Remote, citiesRemote} = this.options
 
@@ -113,7 +117,6 @@ export class ReverseGeocoder {
             toInsert.push({
               geoNameId: city.geonameid,
               name: city.name,
-              alternateNames: city.alternatenames,
               countryCode: city.countryCode,
               admin1Code: city.admin1Code,
               admin2Code: city.admin2Code,
@@ -128,10 +131,3 @@ export class ReverseGeocoder {
     })
   }
 }
-
-(async () => {
-  const reverseGeocoder = new ReverseGeocoder()
-  await reverseGeocoder.run()
-  console.log("done!")
-})()
-

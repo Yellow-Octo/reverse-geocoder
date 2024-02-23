@@ -6,7 +6,6 @@ export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable(TABLE_NAME, (table) => {
     table.integer('geoNameId').index()
     table.string('name')
-    table.string('alternateNames')
     table.string('countryCode')
     table.string('admin1Code')
     table.string('admin2Code')

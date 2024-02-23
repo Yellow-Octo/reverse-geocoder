@@ -9,7 +9,6 @@ export type CityType = {
   geonameid: string
   name: string
   asciiname: string
-  alternatenames: string
   latitude: string
   longitude: string
   featureClass: string
