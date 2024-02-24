@@ -1,7 +1,7 @@
 import * as https from "https";
 import {IncomingMessage} from "node:http";
 import * as fs from "fs";
-import {Stream} from "node:stream";
+import {Readable} from "node:stream";
 
 export async function openWebFileStream(url: string): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
@@ -11,7 +11,7 @@ export async function openWebFileStream(url: string): Promise<IncomingMessage> {
   })
 }
 
-export async function getWebOrFileStreamWithSize(pathOrURL: string): Promise<[stream: Stream, size: number]> {
+export async function getWebOrFileStreamWithSize(pathOrURL: string): Promise<[stream: Readable, size: number]> {
   if (pathOrURL.startsWith("http")) {
     const webStream = await openWebFileStream(pathOrURL)
     const contentLength = webStream.headers['content-length']
