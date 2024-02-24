@@ -1,11 +1,12 @@
 import {Knex} from "knex";
+import {DATABASE_LOCATION} from "./helpers/constants";
 
 require("ts-node/register")
 
 export default {
   client: 'sqlite3',
   connection: {
-    filename: "./data/db.sqlite"
+    filename: DATABASE_LOCATION
   },
   useNullAsDefault: true,
   migrations: {

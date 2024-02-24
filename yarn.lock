@@ -4165,6 +4165,11 @@ typescript@^4.6.3:
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-4.6.3.tgz#eefeafa6afdd31d725584c67a0eaba80f6fc6c6c"
   integrity sha512-yNIatDa5iaofVozS/uQJEl3JRWLKKGJKh6Yaiv0GLGSuhpFJe7P3SbHZ8/yjAHRQwKRoA6YZqlfjXWmVzoVSMw==
 
+udsv@^0.5.3:
+  version "0.5.3"
+  resolved "https://registry.yarnpkg.com/udsv/-/udsv-0.5.3.tgz#b6bf405e1f9e3c6c79e1d2ed75d59592aed27e39"
+  integrity sha512-A4WSOXDgyu3ZlQnMZu9lVtuAhke9X5XG9RZFGbO3urSiCjwYKfy96XV/+BWnm1Y1lKKaBInU0e98Moy6TOiVYA==
+
 unique-filename@^1.1.1:
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/unique-filename/-/unique-filename-1.1.1.tgz#1d69769369ada0583103a1e6ae87681b56573230"

@@ -1,17 +1,22 @@
 import {getWebOrFileStreamWithSize} from "./helpers/helpers";
 import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
-import {knexInstance} from "./Database";
+import {Database, knexInstance} from "./Database";
 import unzipper from "unzipper";
 import {ProgressBarStream} from "./streams/ProgressBarStream";
-import {Stream, Writable} from "node:stream";
+import {Readable, Stream, Writable} from "node:stream";
 import path from "path";
 import {parse} from 'fast-csv';
 import {AdminType, AlternateNameType, CityType} from "./types/types";
 import {isLanguageCode} from "./helpers/isLanguageCode";
 import * as fs from "fs";
 import {CsvParser} from "./streams/CsvParser";
-import {LineStream} from "./streams/LineStream";
+import {UDSVTransform} from "./streams/USDVTransform";
+import {pipeline} from "stream";
+import {ALTERNATE_HEADERS} from "./helpers/constants";
+import {inferSchema, initParser, Parser} from "udsv";
+import {ReadStream} from "node:fs";
+import {IncomingMessage} from "node:http";
 
 const BATCH_SIZE = 500
 
@@ -156,71 +161,46 @@ export class ReverseGeocoder {
     })
   }
 
-  testCSV = async () => {
-    const HEADERS = ["alternateNameId", "geonameid", "isolanguage", "alternateName", "isPreferredName", "isShortName",
-      "isColloquial", "isHistoric"]
-    const fileSize = await fs.promises.stat(path.join(__dirname, "/downloads/alternateNames.zip")).then((stats) => stats.size)
-    return new Promise((resolve, reject) => {
-      fs.createReadStream(path.join(__dirname, "/downloads/alternateNames.zip"))
-        .pipe(new ProgressBarStream(fileSize)) // 1s with just ProgressBar , highWaterMark doesn't make difference
-        .pipe(unzipper.ParseOne(/alternateNames/)) //17s with unzip
-        .pipe(parse({
-          delimiter: "\t",
-          headers: HEADERS,
-        })) //215 FUCKING SECONDS WTF with csv parsing
-        .pipe(new Writable({
-          objectMode: true,
-          write: async (chunk, encoding, callback) => {
-            callback()
+  loadAlternateNamesZip = async (stream: Readable) => {
+    stream.pipe(unzipper.ParseOne(/alternate/))
+    let toInsert: any[] = []
+    let parser: Parser;
+    for await (const buffer of stream) {
+      const strChunk = buffer.toString("utf-8");
+      parser ??= initParser(inferSchema(strChunk));
+      parser.chunk<string[]>(strChunk, parser.typedArrs, (batch) => {
+        batch.forEach((row) => {
+          const [_alternateNameId, geonameid, isolanguage, alternateName, isPreferredName, isShortName, _isColloquial, _isHistoric] = row
+          if (isLanguageCode(isolanguage)) {
+            toInsert.push({
+              geoNameId: geonameid,
+              alternateName,
+              isoLanguage: isolanguage,
+              isPreferredName: isPreferredName === "1",
+              isShortName: isShortName === "1",
+            })
           }
-        }))
-        .on('finish', resolve)
-        .on('error', reject)
-    })
+        })
+
+        stream.pause()
+        insertAlternateNames(toInsert).then(() => {
+          stream.resume()
+          toInsert = []
+        })
+      });
+    }
+    parser!.end();
   }
-  loadAlternateNamesZip = async (zipStream: Stream) => {
-    return new Promise((resolve, reject) => {
-      zipStream
-        .pipe(unzipper.ParseOne(/alternateNames/))
-        .pipe(parse({
-          delimiter: "\t",
-          headers: ["alternateNameId", "geonameid", "isolanguage", "alternateName", "isPreferredName", "isShortName",
-            "isColloquial", "isHistoric"],
-        }))
-        // .pipe(new BatchStream(BATCH_SIZE, {objectMode: true, highWaterMark: BATCH_SIZE * 2}))
-        // .pipe(new AsyncWorkStream<AlternateNameType[]>(async (batch) => {
-        //   const toInsert: any = []
-        //   batch.forEach((name) => {
-        //     if (!isLanguageCode(name.isolanguage)) return
-        //     // filter out anything that is a historic name
-        //     if (name.isHistoric === "1") return
-        //
-        //     toInsert.push({
-        //       alternateNameId: name.alternateNameId,
-        //       geonameid: name.geonameid,
-        //       isolanguage: name.isolanguage,
-        //       alternateName: name.alternateName,
-        //       isPreferredName: name.isPreferredName === "1",
-        //       isShortName: name.isShortName === "1",
-        //       isColloquial: name.isColloquial === "1",
-        //     })
-        //   })
-        //
-        //   await knexInstance.batchInsert('alternateNames', toInsert)
-        // }))
-        .pipe(new Writable({
-          objectMode: true,
-          write: async (chunk, encoding, callback) => {
-            callback()
-          }
-        }))
-        .on('finish', resolve)
-        .on('error', reject)
-    })
+}
+
+async function insertAlternateNames(toInsert: any[]) {
+  const LIMIT_PER_INSERT = 500
+  for (let i = 0; i < toInsert.length; i += LIMIT_PER_INSERT) {
+    await knexInstance.batchInsert('alternateNames', toInsert.slice(i, i + LIMIT_PER_INSERT))
   }
 }
 
 (async () => {
   const reverseGeocoder = new ReverseGeocoder()
-  await reverseGeocoder.testCSV()
+  await reverseGeocoder.run()
 })()
