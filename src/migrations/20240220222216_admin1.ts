@@ -6,7 +6,7 @@ export async function up(knex: Knex): Promise<void> {
     table.string('id').notNullable().index()
     table.string('name')
     table.string('nameAscii')
-    table.integer('geoNameId').index()
+    table.integer('geoNameId')
   })
 }
 

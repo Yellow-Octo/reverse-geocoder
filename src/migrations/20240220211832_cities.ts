@@ -4,7 +4,7 @@ const TABLE_NAME = "cities"
 
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable(TABLE_NAME, (table) => {
-    table.integer('geoNameId').index()
+    table.integer('geoNameId')
     table.string('name')
     table.string('countryCode')
     table.string('admin1Code')
