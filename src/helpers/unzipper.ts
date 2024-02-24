@@ -1,18 +1,26 @@
-import {exec} from "child_process";
-
-import os from "os";
-import path from "path";
+import os from 'os';
+import path from 'path';
+import {exec} from 'child_process';
+import {mkdirSync} from 'fs'; // Import fs module to use mkdirSync
 
 /**
- * Asynchronously unzips a specific file from an archive.
+ * Asynchronously unzips a specific file from an archive or the entire archive if no specific file is provided.
  *
  * @param {string} archivePath - The path to the zip file.
- * @param {string} filePathWithinArchive - The path of the file within the zip archive.
- * @param {string} destinationPath - The destination path for the extracted file.
+ * @param {string} filePathWithinArchive - The path of the file within the zip archive
+ * @param {string} destinationPath - The destination path for the extracted file or directory.
  */
-async function unzipSpecificFile(archivePath, filePathWithinArchive, destinationPath) {
+export async function unzipSpecificFile(archivePath: string, filePathWithinArchive: string, destinationPath: string) {
   return new Promise<void>((resolve, reject) => {
-    const command = buildUnzipCommand(archivePath, filePathWithinArchive, destinationPath);
+    // Correctly derive the destination directory from the destination path
+    const destinationDir = path.dirname(destinationPath);
+    // Ensure the destination directory exists
+    mkdirSync(destinationDir, {recursive: true});
+
+    // Determine the directory to place the extracted content
+    // If `filePathWithinArchive` is not provided, use `destinationDir` as final path
+    const finalDestinationPath = filePathWithinArchive ? destinationPath : destinationDir;
+    const command = buildUnzipCommand(archivePath, filePathWithinArchive, finalDestinationPath);
 
     exec(command, (error, stdout, stderr) => {
       if (error) {
@@ -26,11 +34,11 @@ async function unzipSpecificFile(archivePath, filePathWithinArchive, destination
 }
 
 /**
- * Builds the appropriate unzip command based on the operating system.
+ * Builds the appropriate unzip command based on the operating system and provided parameters.
  *
  * @param {string} archivePath - The path to the zip file.
- * @param {string} filePathWithinArchive - The path of the file within the zip archive.
- * @param {string} destinationPath - The destination path for the extracted file.
+ * @param {string} filePathWithinArchive - The path of the file within the zip archive. Optional.
+ * @param {string} destinationPath - The destination directory for the extracted content.
  * @returns {string} - The system command to execute.
  */
 function buildUnzipCommand(archivePath, filePathWithinArchive, destinationPath) {
@@ -38,20 +46,16 @@ function buildUnzipCommand(archivePath, filePathWithinArchive, destinationPath) 
 
   let command;
   if (osType === 'Linux' || osType === 'Darwin') {
-    // On macOS and Linux, using unzip and tar respectively
     if (filePathWithinArchive) {
-      // If a specific file within the archive is specified
-      command = `unzip -p "${archivePath}" "${filePathWithinArchive}" > "${path.join(destinationPath, filePathWithinArchive)}"`;
+      // Correctly direct the output to the destination path without duplicating the filename
+      command = `unzip -p "${archivePath}" "${filePathWithinArchive}" > "${destinationPath}"`;
     } else {
-      // If no specific file is specified, extract everything
-      command = `unzip "${archivePath}" -d "${destinationPath}"`;
+      // Extracts the entire archive to the specified directory
+      command = `unzip "${archivePath}" -d "${path.dirname(destinationPath)}"`;
     }
   } else if (osType === 'Windows_NT') {
-    // Windows command (assuming PowerShell is available)
-    command = `Expand-Archive -LiteralPath "${archivePath}" -DestinationPath "${destinationPath}"`;
+    command = `powershell Expand-Archive -LiteralPath "${archivePath}" -DestinationPath "${path.dirname(destinationPath)}"`;
     if (filePathWithinArchive) {
-      // Windows does not directly support extracting a specific file via command line in the same way
-      // This is a placeholder; you'd need to extract all then move the specific file or use a Node.js library
       console.warn('Extracting a specific file from an archive is not directly supported on Windows with this method.');
     }
   } else {

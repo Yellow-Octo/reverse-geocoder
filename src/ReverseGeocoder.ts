@@ -1,24 +1,18 @@
-import {getWebOrFileStreamWithSize} from "./helpers/helpers";
+import {downloadFile, getWebOrFileStreamWithSize} from "./helpers/helpers";
 import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
-import {Database, knexInstance} from "./Database";
+import {knexInstance} from "./Database";
 import unzipper from "unzipper";
 import {ProgressBarStream} from "./streams/ProgressBarStream";
-import {Readable, Stream, Writable} from "node:stream";
+import {Readable, Stream} from "node:stream";
 import path from "path";
 import {parse} from 'fast-csv';
-import {AdminType, AlternateNameType, CityType} from "./types/types";
+import {AdminType, CityType} from "./types/types";
 import {isLanguageCode} from "./helpers/isLanguageCode";
-import * as fs from "fs";
-import {CsvParser} from "./streams/CsvParser";
-import {UDSVTransform} from "./streams/USDVTransform";
-import {pipeline} from "stream";
-import {ALTERNATE_HEADERS} from "./helpers/constants";
 import {inferSchema, initParser, Parser} from "udsv";
-import {ReadStream} from "node:fs";
-import {IncomingMessage} from "node:http";
+import {unzipSpecificFile} from "./helpers/unzipper";
 
-const BATCH_SIZE = 500
+const BATCH_SIZE = 400
 
 const DEFAULT_OPTIONS = {
   // admin1Remote: "https://download.geonames.org/export/dump/admin1CodesASCII.txt",
@@ -68,34 +62,55 @@ export class ReverseGeocoder {
     const [admin1Stream, admin1Size] = await getWebOrFileStreamWithSize((admin1Local || admin1Remote)!)
     const [admin2Stream, admin2Size] = await getWebOrFileStreamWithSize((admin2Local || admin2Remote)!)
     const [citiesStream, citiesSize] = await getWebOrFileStreamWithSize((citiesLocal || citiesRemote)!)
-    const [alternateNamesStream, alternateNamesSize] = await getWebOrFileStreamWithSize((alternateNamesLocal || alternateNamesRemote)!)
 
-    // if (admin1Remote) {
-    //   console.log("Downloading admin1")
-    // } else {
-    //   console.log("Using local admin1")
-    // }
-    // await this.loadAdmin1Codes(admin1Stream.pipe(new ProgressBarStream(admin1Size)))
-    // if (admin2Remote) {
-    //   console.log("Downloading admin2")
-    // } else {
-    //   console.log("Using local admin2")
-    // }
-    // await this.loadAdmin2Codes(admin2Stream.pipe(new ProgressBarStream(admin2Size)))
-    // if (citiesRemote) {
-    //   console.log("Downloading cities")
-    // } else {
-    //   console.log("Using local cities")
-    // }
-    // await this.loadCityZip(citiesStream.pipe(new ProgressBarStream(citiesSize)))
+    if (admin1Remote) {
+      console.log("Downloading admin1")
+    } else if (admin1Local) {
+      console.log("Using local provided")
+    } else {
+      throw new Error("No admin1 source provided")
+    }
+    await this.loadAdmin1Codes(admin1Stream.pipe(new ProgressBarStream(admin1Size)))
+    if (admin2Remote) {
+      console.log("Downloading admin2")
+    } else if (admin2Local) {
+      console.log("Using local admin2")
+    } else {
+      throw new Error("No admin2 source provided")
+    }
+    await this.loadAdmin2Codes(admin2Stream.pipe(new ProgressBarStream(admin2Size)))
+    if (citiesRemote) {
+      console.log("Downloading cities")
+    } else if (citiesLocal) {
+      console.log("Using local cities")
+    } else {
+      throw new Error("No cities source provided")
+    }
+    await this.loadCityZip(citiesStream.pipe(new ProgressBarStream(citiesSize)))
 
     if (alternateNamesRemote) {
       console.log("Downloading alternate names")
+    } else if (alternateNamesLocal) {
+      console.log("Using local alternate names")
     } else {
+      throw new Error("No alternate names source provided")
+    }
+    const alternateNamesPath = path.join(__dirname, "/downloads/alternateNames.txt")
+
+    const zippedFilePath = (alternateNamesRemote || alternateNamesLocal)!
+    if (alternateNamesRemote) {
+      console.log("Downloading alternate names")
+      const downloadPath = "./downloads/alternateNames.zip"
+      await downloadFile(alternateNamesRemote, downloadPath)
+
+    } else if (alternateNamesLocal) {
       console.log("Using local alternate names")
     }
-    await this.loadAlternateNamesZip(alternateNamesStream.pipe(new ProgressBarStream(alternateNamesSize)))
+    await unzipSpecificFile(zippedFilePath, "alternateNames.txt", alternateNamesPath)
+    const [alternateNamesStream, size] = await getWebOrFileStreamWithSize(alternateNamesPath)
+    await this.loadAlternateNames(alternateNamesStream.pipe(new ProgressBarStream(size)))
   }
+
 
   loadAdmin1Codes = async (csvStream: Stream) => {
     return new Promise<void>((resolve, reject) => {
@@ -135,7 +150,7 @@ export class ReverseGeocoder {
             "featureCode", "countryCode", "cc2", "admin1Code", "admin2Code", "admin3Code", "admin4Code", "population",
             "elevation", "dem", "timezone", "modificationDate"]
         }))
-        .pipe(new BatchStream(5000, {objectMode: true}))
+        .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<CityType[]>(async (batch) => {
           const toInsert: any = []
           batch.forEach((city) => {
@@ -161,12 +176,18 @@ export class ReverseGeocoder {
     })
   }
 
-  loadAlternateNamesZip = async (stream: Readable) => {
-    stream.pipe(unzipper.ParseOne(/alternate/))
+  loadAlternateNames = async (stream: Readable) => {
+    async function insertAlternateNames(toInsert: any[]) {
+      const LIMIT_PER_INSERT = 400
+      for (let i = 0; i < toInsert.length; i += LIMIT_PER_INSERT) {
+        await knexInstance.batchInsert('alternateNames', toInsert.slice(i, i + LIMIT_PER_INSERT))
+      }
+    }
+
     let toInsert: any[] = []
     let parser: Parser;
     for await (const buffer of stream) {
-      const strChunk = buffer.toString("utf-8");
+      const strChunk = buffer.toString();
       parser ??= initParser(inferSchema(strChunk));
       parser.chunk<string[]>(strChunk, parser.typedArrs, (batch) => {
         batch.forEach((row) => {
@@ -193,14 +214,8 @@ export class ReverseGeocoder {
   }
 }
 
-async function insertAlternateNames(toInsert: any[]) {
-  const LIMIT_PER_INSERT = 500
-  for (let i = 0; i < toInsert.length; i += LIMIT_PER_INSERT) {
-    await knexInstance.batchInsert('alternateNames', toInsert.slice(i, i + LIMIT_PER_INSERT))
-  }
-}
-
 (async () => {
   const reverseGeocoder = new ReverseGeocoder()
   await reverseGeocoder.run()
+  console.log("All data loaded into Database")
 })()
