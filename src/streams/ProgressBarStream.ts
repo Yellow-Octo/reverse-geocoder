@@ -2,13 +2,11 @@ import {Transform, TransformCallback, TransformOptions} from "stream";
 import {ProgressBar} from "../helpers/ProgressBar";
 
 export class ProgressBarStream extends Transform {
-  private readonly total: number;
   private current = 0;
   private progressBar: ProgressBar;
 
   constructor(totalBytes: number, options?: TransformOptions) {
     super(options);
-    this.total = totalBytes
     this.progressBar = new ProgressBar(30, totalBytes)
   }
 
