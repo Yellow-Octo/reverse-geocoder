@@ -43,3 +43,12 @@ export async function downloadFile(url: string, destination: string) {
       })
   })
 }
+
+export function metersToDegrees(meters: number): number {
+  const earthRadiusInMeters = 6371000;
+  return meters / (Math.PI / 180 * earthRadiusInMeters);
+}
+
+export function kmToDegrees(km: number): number {
+  return metersToDegrees(km * 1000);
+}

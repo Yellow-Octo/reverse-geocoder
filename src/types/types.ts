@@ -23,6 +23,18 @@ export type CityType = {
   point?: any
 }
 
+export type CityInsertType = {
+  geoNameId: string
+  name: string
+  countryCode: string
+  admin1Code: string
+  admin1?: string
+  admin2Code: string
+  admin2?: string
+  point: any
+  modificationDate: string
+
+}
 /**
  * alternateNameId   : the id of this alternate name, int
  * geonameid         : geonameId referring to id in table 'geoname', int
@@ -46,4 +58,12 @@ export type AlternateNameType = {
   isHistoric: "1" | ""
   from?: string
   to?: string
+}
+
+export type AlternateNameInsertType = {
+  geoNameId: string,
+  alternateName: string,
+  isoLanguage: string,
+  isPreferredName: boolean,
+  isShortName: boolean
 }

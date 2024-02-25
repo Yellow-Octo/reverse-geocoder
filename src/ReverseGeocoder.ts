@@ -1,4 +1,4 @@
-import {downloadFile, getWebOrFileStreamWithSize} from "./helpers/helpers";
+import {downloadFile, getWebOrFileStreamWithSize, kmToDegrees, metersToDegrees} from "./helpers/helpers";
 import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
 import {knexInstance} from "./Database";
@@ -7,7 +7,7 @@ import {ProgressBarStream} from "./streams/ProgressBarStream";
 import {Readable, Stream} from "node:stream";
 import path from "path";
 import {parse} from 'fast-csv';
-import {AdminType, CityType} from "./types/types";
+import {AdminType, AlternateNameInsertType, AlternateNameType, CityInsertType, CityType} from "./types/types";
 import {isLanguageCode} from "./helpers/isLanguageCode";
 import {inferSchema, initParser, Parser} from "udsv";
 import {unzipSpecificFile} from "./helpers/unzipper";
@@ -43,8 +43,49 @@ export class ReverseGeocoder {
     this.options = {...DEFAULT_OPTIONS, ...options}
   }
 
-  get = async (lat: number, lng: number, language?: string) => {
-    const result = await knexInstance.raw(``)
+  getWithLanguage = async (lat: number, lng: number, languageCode: string) => {
+    if (!isLanguageCode(languageCode)) throw new Error("Invalid language code" + languageCode)
+    const result = await this.searchRepeatedly(lat, lng)
+    if (result === null) {
+      return null
+    }
+    const alternateNames = await knexInstance
+      .select('alternateNames.alternateName')
+      .from('alternateNames')
+      .where('alternateNames.geoNameId', result.geoNameId)
+      .andWhere('alternateNames.isoLanguage', languageCode)
+    return {
+      ...result,
+      alternateNames: alternateNames.map((row) => row.alternateName)
+    }
+  }
+
+  searchRepeatedly = async (lat: number, lng: number) => {
+    let searchRadiusKM = 20
+    let result: CityInsertType | null = null
+    while (result === undefined && searchRadiusKM <= 320) {
+      result = await this.search(lat, lng, searchRadiusKM)
+      searchRadiusKM *= 2
+    }
+    return result
+  }
+
+  search = async (lat: number, lng: number, radiusKM: number) => {
+    const degrees = kmToDegrees(radiusKM)
+    const result: CityInsertType[] = await knexInstance.raw(`SELECT cities.name           AS name,
+       cities.countryCode    AS country,
+       admin1.name           AS admin1,
+       admin2.name           AS admin2
+FROM (SELECT *
+      FROM KNN2
+      WHERE f_table_name = 'cities'
+        AND ref_geometry = MakePoint(?, ?, 4326)
+        AND radius = ?
+        AND max_items = 1) AS KNN
+         JOIN cities ON cities.rowid = KNN.fid
+         LEFT JOIN admin1 ON cities.countryCode || '.' || cities.admin1Code = admin1.id
+         LEFT JOIN admin2 ON cities.countryCode || '.' || cities.admin1Code || '.' || cities.admin2Code = admin2.id;`, [lng, lat, degrees])
+    return result[0] || null
   }
 
   run = async () => {
@@ -99,16 +140,12 @@ export class ReverseGeocoder {
 
     const zippedFilePath = (alternateNamesRemote || alternateNamesLocal)!
     if (alternateNamesRemote) {
-      console.log("Downloading alternate names")
       const downloadPath = "./downloads/alternateNames.zip"
       await downloadFile(alternateNamesRemote, downloadPath)
-
-    } else if (alternateNamesLocal) {
-      console.log("Using local alternate names")
     }
     await unzipSpecificFile(zippedFilePath, "alternateNames.txt", alternateNamesPath)
     const [alternateNamesStream, size] = await getWebOrFileStreamWithSize(alternateNamesPath)
-    await this.loadAlternateNames(alternateNamesStream.pipe(new ProgressBarStream(size)))
+    await this.loadAlternateNamesSlow(alternateNamesStream.pipe(new ProgressBarStream(size)))
   }
 
 
@@ -152,7 +189,7 @@ export class ReverseGeocoder {
         }))
         .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<CityType[]>(async (batch) => {
-          const toInsert: any = []
+          const toInsert: CityInsertType[] = []
           batch.forEach((city) => {
             const latFloat = parseFloat(city.latitude)
             const lngFloat = parseFloat(city.longitude)
@@ -176,27 +213,63 @@ export class ReverseGeocoder {
     })
   }
 
+  // 7_172_213 rows run 1, 7_172_213 run 2 SAME =)
+  loadAlternateNamesSlow = async (stream: Readable) => {
+    return new Promise((resolve, reject) => {
+      stream
+        .pipe(parse({
+          delimiter: "\t",
+          headers: ["alternateNameId", "geonameid", "isolanguage", "alternateName", "isPreferredName", "isShortName",
+            "isColloquial", "isHistoric"],
+        }))
+        .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
+        .pipe(new AsyncWorkStream<AlternateNameType[]>(async (batch) => {
+          const toInsert: {
+            geoNameId: string,
+            alternateName: string,
+            isoLanguage: string,
+            isPreferredName: boolean,
+            isShortName: boolean
+          }[] = []
+          batch.forEach((row) => {
+            if (isLanguageCode(row.isolanguage)) {
+              toInsert.push({
+                geoNameId: row.geonameid,
+                alternateName: row.alternateName,
+                isoLanguage: row.isolanguage,
+                isPreferredName: row.isPreferredName === "1",
+                isShortName: row.isShortName === "1",
+              })
+            }
+          })
+          await knexInstance.batchInsert('alternateNames', toInsert)
+        }))
+        .on('finish', resolve)
+        .on('error', reject)
+    })
+  }
+  //1086800 rows run 1 // 1055200 run 2
   loadAlternateNames = async (stream: Readable) => {
-    async function insertAlternateNames(toInsert: any[]) {
+    async function insertAlternateNames(toInsert: AlternateNameInsertType[]) {
       const LIMIT_PER_INSERT = 400
       for (let i = 0; i < toInsert.length; i += LIMIT_PER_INSERT) {
         await knexInstance.batchInsert('alternateNames', toInsert.slice(i, i + LIMIT_PER_INSERT))
       }
     }
 
-    let toInsert: any[] = []
+    let toInsert: AlternateNameInsertType[] = []
     let parser: Parser;
     for await (const buffer of stream) {
       const strChunk = buffer.toString();
       parser ??= initParser(inferSchema(strChunk));
       parser.chunk<string[]>(strChunk, parser.typedArrs, (batch) => {
         batch.forEach((row) => {
-          const [_alternateNameId, geonameid, isolanguage, alternateName, isPreferredName, isShortName, _isColloquial, _isHistoric] = row
-          if (isLanguageCode(isolanguage)) {
+          const [_alternateNameId, geoNameId, isoLanguage, alternateName, isPreferredName, isShortName, _isColloquial, _isHistoric] = row
+          if (isLanguageCode(isoLanguage)) {
             toInsert.push({
-              geoNameId: geonameid,
+              geoNameId: geoNameId,
               alternateName,
-              isoLanguage: isolanguage,
+              isoLanguage: isoLanguage,
               isPreferredName: isPreferredName === "1",
               isShortName: isShortName === "1",
             })
@@ -216,6 +289,6 @@ export class ReverseGeocoder {
 
 (async () => {
   const reverseGeocoder = new ReverseGeocoder()
-  await reverseGeocoder.run()
-  console.log("All data loaded into Database")
+  const result = await reverseGeocoder.search(42.3601, -71.0589, 20)
+  console.log(result)
 })()
