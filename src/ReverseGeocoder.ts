@@ -304,9 +304,3 @@ FROM (SELECT *
     parser!.end();
   }
 }
-
-(async () => {
-  const reverseGeocoder = new ReverseGeocoder()
-  const result = await reverseGeocoder.searchWithLanguage(42.3601, -71.0589, "zh", false)
-  console.log(result)
-})()

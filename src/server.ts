@@ -1,8 +1,10 @@
 import * as http from "http";
 import {ReverseGeocoder} from "./ReverseGeocoder";
 
+const geocoder = new ReverseGeocoder();
+
 export const server = http.createServer(async (req, res) => {
-  const requestUrl = new URL(req.url!, `http://${req.headers.host}`);
+  const requestUrl = new URL(req.url!, `https://${req.headers.host}`);
   const path = requestUrl.pathname;
 
   // Check if the path matches the desired route and method is GET
@@ -10,9 +12,9 @@ export const server = http.createServer(async (req, res) => {
     const searchParams = requestUrl.searchParams;
     const lat = searchParams.get('lat');
     const lng = searchParams.get('lng');
-    const language = searchParams.get('language');
+    const languageCode = searchParams.get('language');
 
-    if (!lat || !lng) {
+    if (lat === null || lng === null) {
       res.writeHead(400, {'Content-Type': 'text/plain'});
       res.end('Missing query parameters: lat, lng, or language');
       return;
@@ -27,9 +29,14 @@ export const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const result = await ReverseGeocoder.get(latFloat, lngFloat, language);
-      res.writeHead(200, {'Content-Type': 'text/plain'});
-      return res.end(result);
+      let result
+      if (languageCode) {
+        result = await geocoder.searchWithLanguage(latFloat, lngFloat, languageCode, false);
+      } else {
+        result = await geocoder.searchRepeatedly(latFloat, lngFloat);
+      }
+      res.writeHead(200, {'Content-Type': 'application/json'});
+      return res.end(JSON.stringify(result));
     } catch (error) {
       res.writeHead(500, {'Content-Type': 'text/plain'});
       return res.end('Internal Server Error');
