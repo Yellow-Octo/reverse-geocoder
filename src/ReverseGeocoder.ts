@@ -1,4 +1,4 @@
-import {downloadFile, getWebOrFileStreamWithSize, kmToDegrees, metersToDegrees} from "./helpers/helpers";
+import {downloadFile, getWebOrFileStreamWithSize, kmToDegrees} from "./helpers/helpers";
 import {BatchStream} from "./streams/BatchStream";
 import {AsyncWorkStream} from "./streams/AsyncWorkerStream";
 import {knexInstance} from "./Database";
@@ -43,27 +43,44 @@ export class ReverseGeocoder {
     this.options = {...DEFAULT_OPTIONS, ...options}
   }
 
-  getWithLanguage = async (lat: number, lng: number, languageCode: string) => {
+  searchWithLanguage = async (lat: number, lng: number, languageCode: string, exact: boolean) => {
     if (!isLanguageCode(languageCode)) throw new Error("Invalid language code" + languageCode)
     const result = await this.searchRepeatedly(lat, lng)
     if (result === null) {
       return null
     }
-    const alternateNames = await knexInstance
-      .select('alternateNames.alternateName')
-      .from('alternateNames')
-      .where('alternateNames.geoNameId', result.geoNameId)
-      .andWhere('alternateNames.isoLanguage', languageCode)
+
     return {
       ...result,
-      alternateNames: alternateNames.map((row) => row.alternateName)
+      alternateNames: await this.getAlternateNames(result.geoNameId, languageCode, exact)
     }
+  }
+
+  getAlternateNames = async (geoNameId: string, languageCode?: string, exact?: boolean): Promise<AlternateNameInsertType[]> => {
+    if (languageCode !== undefined && !isLanguageCode(languageCode)) throw new Error("Invalid language code" + languageCode)
+    const query = knexInstance
+      .select<AlternateNameInsertType[]>([
+        'alternateNames.isoLanguage',
+        'alternateNames.alternateName',
+        'alternateNames.isPreferredName',
+        'alternateNames.isShortName'
+        ])
+      .from('alternateNames')
+      .where('alternateNames.geoNameId', geoNameId)
+    if (languageCode) {
+      if (exact) {
+        query.andWhere('alternateNames.isoLanguage', languageCode)
+      } else {
+        query.andWhereLike('alternateNames.isoLanguage', languageCode + "%")
+      }
+    }
+    return query;
   }
 
   searchRepeatedly = async (lat: number, lng: number) => {
     let searchRadiusKM = 20
     let result: CityInsertType | null = null
-    while (result === undefined && searchRadiusKM <= 320) {
+    while (result === null && searchRadiusKM <= 320) {
       result = await this.search(lat, lng, searchRadiusKM)
       searchRadiusKM *= 2
     }
@@ -74,6 +91,7 @@ export class ReverseGeocoder {
     const degrees = kmToDegrees(radiusKM)
     const result: CityInsertType[] = await knexInstance.raw(`SELECT cities.name           AS name,
        cities.countryCode    AS country,
+       cities.geoNameId      AS geoNameId,
        admin1.name           AS admin1,
        admin2.name           AS admin2
 FROM (SELECT *
@@ -289,6 +307,6 @@ FROM (SELECT *
 
 (async () => {
   const reverseGeocoder = new ReverseGeocoder()
-  const result = await reverseGeocoder.search(42.3601, -71.0589, 20)
+  const result = await reverseGeocoder.searchWithLanguage(42.3601, -71.0589, "zh", false)
   console.log(result)
 })()
