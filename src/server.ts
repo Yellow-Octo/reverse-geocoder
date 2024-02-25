@@ -1,5 +1,6 @@
 import * as http from "http";
 import {ReverseGeocoder} from "./ReverseGeocoder";
+import {isValidLat, isValidLng} from "./helpers/isValidCoordinate";
 
 const geocoder = new ReverseGeocoder();
 
@@ -23,6 +24,11 @@ export const server = http.createServer(async (req, res) => {
     const latFloat = parseFloat(lat);
     const lngFloat = parseFloat(lng);
     if (isNaN(latFloat) || isNaN(lngFloat)) {
+      res.writeHead(400, {'Content-Type': 'text/plain'});
+      res.end('Invalid lat or lng');
+      return;
+    }
+    if (!isValidLat(latFloat) || !isValidLng(lngFloat)) {
       res.writeHead(400, {'Content-Type': 'text/plain'});
       res.end('Invalid lat or lng');
       return;
