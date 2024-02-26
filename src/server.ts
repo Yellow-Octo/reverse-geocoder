@@ -49,6 +49,13 @@ export const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (path === "/download"){
+    await geocoder.downloadData();
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('All data downloaded');
+    return;
+  }
+
   res.writeHead(404, {'Content-Type': 'text/plain'});
   return res.end('Not Found');
 });

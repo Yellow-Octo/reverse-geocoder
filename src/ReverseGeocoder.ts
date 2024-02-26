@@ -11,18 +11,15 @@ import {AdminType, AlternateNameInsertType, AlternateNameType, CityInsertType, C
 import {isLanguageCode} from "./helpers/isLanguageCode";
 import {inferSchema, initParser, Parser} from "udsv";
 import {unzipSpecificFile} from "./helpers/unzipper";
+import * as fs from "fs";
 
 const BATCH_SIZE = 400
 
 const DEFAULT_OPTIONS = {
-  // admin1Remote: "https://download.geonames.org/export/dump/admin1CodesASCII.txt",
-  // admin2Remote: "https://download.geonames.org/export/dump/admin2Codes.txt",
-  // citiesRemote: "https://download.geonames.org/export/dump/cities500.zip",
-  // alternateNamesRemote: "https://download.geonames.org/export/dump/alternateNames.zip",
-  admin1Local: path.join(__dirname, "/downloads/admin1CodesASCII.txt"),
-  admin2Local: path.join(__dirname, "/downloads/admin2Codes.txt"),
-  citiesLocal: path.join(__dirname, "/downloads/cities500.zip"),
-  alternateNamesLocal: path.join(__dirname, "/downloads/alternateNames.zip"), //16M rows
+  admin1Remote: "https://download.geonames.org/export/dump/admin1CodesASCII.txt",
+  admin2Remote: "https://download.geonames.org/export/dump/admin2Codes.txt",
+  citiesRemote: "https://download.geonames.org/export/dump/cities500.zip",
+  alternateNamesRemote: "https://download.geonames.org/export/dump/alternateNames.zip",
 }
 
 type OptionsType = {
@@ -64,7 +61,7 @@ export class ReverseGeocoder {
         'alternateNames.alternateName',
         'alternateNames.isPreferredName',
         'alternateNames.isShortName'
-        ])
+      ])
       .from('alternateNames')
       .where('alternateNames.geoNameId', geoNameId)
     if (languageCode) {
@@ -77,6 +74,12 @@ export class ReverseGeocoder {
     return query;
   }
 
+  /**
+   * Since spatialite can't just let us do a KNN without the mandatory radius parameter, we repeatedly query
+   * and expand the search radius until we find a result or we reach a maximum radius
+   * @param lat
+   * @param lng
+   */
   searchRepeatedly = async (lat: number, lng: number) => {
     let searchRadiusKM = 20
     let result: CityInsertType | null = null
@@ -106,7 +109,7 @@ FROM (SELECT *
     return result[0] || null
   }
 
-  run = async () => {
+  downloadData = async () => {
     const {
       admin1Local,
       admin2Local,
@@ -147,25 +150,33 @@ FROM (SELECT *
     }
     await this.loadCityZip(citiesStream.pipe(new ProgressBarStream(citiesSize)))
 
+    if(alternateNamesRemote || alternateNamesLocal){
+      await this.downloadAlternateNames()
+    }
+  }
+
+  async downloadAlternateNames() {
+    const {alternateNamesLocal, alternateNamesRemote} = this.options
+
+    const defaultZipLocation = path.join(__dirname, "/downloads/alternateNames.zip")
     if (alternateNamesRemote) {
       console.log("Downloading alternate names")
+      await downloadFile(alternateNamesRemote, defaultZipLocation)
     } else if (alternateNamesLocal) {
       console.log("Using local alternate names")
     } else {
       throw new Error("No alternate names source provided")
     }
-    const alternateNamesPath = path.join(__dirname, "/downloads/alternateNames.txt")
+    const localAlternateNamesPath = path.join(__dirname, "/downloads/alternateNames.txt")
+    const zippedFilePath = alternateNamesLocal || defaultZipLocation
 
-    const zippedFilePath = (alternateNamesRemote || alternateNamesLocal)!
-    if (alternateNamesRemote) {
-      const downloadPath = "./downloads/alternateNames.zip"
-      await downloadFile(alternateNamesRemote, downloadPath)
-    }
-    await unzipSpecificFile(zippedFilePath, "alternateNames.txt", alternateNamesPath)
-    const [alternateNamesStream, size] = await getWebOrFileStreamWithSize(alternateNamesPath)
-    await this.loadAlternateNamesSlow(alternateNamesStream.pipe(new ProgressBarStream(size)))
+    console.log("Unzipping alternate names")
+    await unzipSpecificFile(zippedFilePath, "alternateNames.txt", localAlternateNamesPath)
+    await fs.promises.unlink(zippedFilePath)
+    const [localStream, size] = await getWebOrFileStreamWithSize(localAlternateNamesPath)
+    await this.loadAlternateNamesSlow(localStream.pipe(new ProgressBarStream(size)))
+    await fs.promises.unlink(localAlternateNamesPath)
   }
-
 
   loadAdmin1Codes = async (csvStream: Stream) => {
     return new Promise<void>((resolve, reject) => {

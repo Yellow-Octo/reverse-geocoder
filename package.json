@@ -4,7 +4,7 @@
   "description": "Boilerplate for TypeScript projects (Node.js and browser modules)",
   "author": "Chris Hager <chris@linuxuser.at>",
   "repository": "https://github.com/metachris/typescript-boilerplate",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "keywords": [
     "typescript",
     "boilerplate",
@@ -12,25 +12,14 @@
   ],
   "main": "./dist/main.js",
   "types": "./dist/main.d.ts",
-  "browser": "./dist/esbuild/browser.js",
-  "bin": {
-    "my-cli-tool": "./dist/esbuild/cli.js"
-  },
   "scripts": {
     "refresh": "yarn rollback && yarn migrate",
     "rollback": "npx knex migrate:rollback --all --knexfile src/knexfile",
     "migrate": "npx knex migrate:latest --knexfile src/knexfile",
-    "cli": "ts-node src/cli.ts",
     "lint": "eslint src/ --ext .js,.jsx,.ts,.tsx",
     "test": "jest",
     "clean": "rm -rf dist build package",
-    "ts-node": "ts-node",
-    "docs": "typedoc --entryPoints src/ReverseGeocoder.ts",
-    "build": "npx tsc -p tsconfig.json",
-    "build-all": "yarn clean && yarn build && yarn esbuild-node && yarn esbuild-browser",
-    "esbuild-node": "esbuild src/cli.ts --bundle --platform=node --minify --sourcemap=external --outfile=dist/esbuild/cli.js",
-    "esbuild-node:dev": "esbuild src/cli.ts --bundle --platform=node --sourcemap=external --outfile=dist/esbuild/cli.js",
-    "esbuild-node:watch": "esbuild src/cli.ts --bundle --platform=node --watch --sourcemap=external --outfile=dist/esbuild/cli.js"
+    "build": "npx tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@types/jest": "^27.4.1",
