@@ -23,10 +23,11 @@ export class Database {
       console.log("All migrations were rolled back.")
     } catch (error) {
       console.error("Error rolling back migrations:", error)
-    } finally {
-      await knexInstance.destroy()
     }
-    if (terminate) process.exit(0)
+    if (terminate) {
+      await knexInstance.destroy()
+      process.exit(0)
+    }
   }
 
   static async latestMigrations() {

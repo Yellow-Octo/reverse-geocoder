@@ -1,2 +1,5 @@
 # Include .gitignore rules
 .gitignore
+src/data
+src/downloads
+node_modules

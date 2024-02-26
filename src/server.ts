@@ -1,6 +1,7 @@
 import * as http from "http";
 import {ReverseGeocoder} from "./ReverseGeocoder";
 import {isValidLat, isValidLng} from "./helpers/isValidCoordinate";
+import {Database} from "./Database";
 
 const geocoder = new ReverseGeocoder();
 
@@ -50,6 +51,8 @@ export const server = http.createServer(async (req, res) => {
   }
 
   if (path === "/download"){
+    await Database.rollbackAll()
+    await Database.latestMigrations()
     await geocoder.downloadData();
     res.writeHead(200, {'Content-Type': 'text/plain'});
     res.end('All data downloaded');

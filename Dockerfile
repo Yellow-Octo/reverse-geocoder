@@ -11,16 +11,16 @@ RUN apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
-WORKDIR /usr/src/app
+WORKDIR /usr/app
 
 # Install app dependencies
 # A wildcard is used to ensure both package.json AND yarn.lock are copied
 COPY package.json yarn.lock ./
 
-RUN yarn install --production
+RUN yarn install
 
 # Bundle app source
-COPY src/ ./src
+COPY . .
 
 RUN yarn build
 
@@ -29,4 +29,4 @@ ENV PORT $PORT
 EXPOSE $PORT 9229 9230
 
 # Define the command to run your app using CMD which defines your runtime
-CMD [ "node", "./src/dist/index.js" ]
+CMD [ "node", "./dist/server.js" ]
