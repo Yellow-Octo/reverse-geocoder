@@ -1,75 +1,74 @@
-import * as http from "http";
+import express from "express";
 import {ReverseGeocoder} from "./ReverseGeocoder";
 import {isValidLat, isValidLng} from "./helpers/isValidCoordinate";
 import {Database} from "./Database";
 
+const app = express();
 const geocoder = new ReverseGeocoder();
 
-export const server = http.createServer(async (req, res) => {
-  const requestUrl = new URL(req.url!, `https://${req.headers.host}`);
-  const path = requestUrl.pathname;
+app.get("/throw", (req, res) => {
+  throw new Error("This is a forced error");
+})
+app.get('/reverse', async (req, res) => {
+  const lat = req.query.lat;
+  const lng = req.query.lng;
+  const languageCode = req.query.language;
 
-  // Check if the path matches the desired route and method is GET
-  if (path === '/reverse' && req.method === 'GET') {
-    const searchParams = requestUrl.searchParams;
-    const lat = searchParams.get('lat');
-    const lng = searchParams.get('lng');
-    const languageCode = searchParams.get('language');
-
-    if (lat === null || lng === null) {
-      res.writeHead(400, {'Content-Type': 'text/plain'});
-      res.end('Missing query parameters: lat, lng, or language');
-      return;
-    }
-
-    const latFloat = parseFloat(lat);
-    const lngFloat = parseFloat(lng);
-    if (isNaN(latFloat) || isNaN(lngFloat)) {
-      res.writeHead(400, {'Content-Type': 'text/plain'});
-      res.end('Invalid lat or lng');
-      return;
-    }
-    if (!isValidLat(latFloat) || !isValidLng(lngFloat)) {
-      res.writeHead(400, {'Content-Type': 'text/plain'});
-      res.end('Invalid lat or lng');
-      return;
-    }
-
-    try {
-      let result
-      if (languageCode) {
-        result = await geocoder.searchWithLanguage(latFloat, lngFloat, languageCode, false);
-      } else {
-        result = await geocoder.searchRepeatedly(latFloat, lngFloat);
-      }
-      res.writeHead(200, {'Content-Type': 'application/json'});
-      return res.end(JSON.stringify(result));
-    } catch (error) {
-      const simpleError = {
-        message: error.message,
-        name: error.name,
-        stack: error.stack,
-        // add other properties if needed
-      };
-      res.writeHead(500, {'Content-Type': 'application/json'});
-      return res.end(JSON.stringify(simpleError));
-    }
+  if (lat === null || lng === null) {
+    return res.status(400).send('Missing query parameters: lat, lng, or language');
   }
 
-  if (path === "/download"){
-    await Database.rollbackAll()
-    await Database.latestMigrations()
-    await geocoder.downloadData();
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.end('All data downloaded');
-    return;
+  const latFloat = parseFloat(lat as string);
+  const lngFloat = parseFloat(lng as string);
+  if (isNaN(latFloat) || isNaN(lngFloat)) {
+    return res.status(400).send('Invalid lat or lng');
   }
+  if (!isValidLat(latFloat) || !isValidLng(lngFloat)) {
+    return res.status(400).send('Invalid lat or lng');
+  }
+  let result;
+  if (languageCode) {
+    result = await geocoder.searchWithLanguage(latFloat, lngFloat, languageCode as string, false);
+  } else {
+    result = await geocoder.searchRepeatedly(latFloat, lngFloat);
+  }
+  return res.json(result);
+});
 
-  res.writeHead(404, {'Content-Type': 'text/plain'});
-  return res.end('Not Found');
+app.get('/download', async (req, res) => {
+  await Database.rollbackAll();
+  await Database.latestMigrations();
+  await geocoder.downloadData();
+  res.status(200).send('All data downloaded');
+});
+
+app.use((error: Error, req, res) => {
+  const simpleError = {
+    message: error.message,
+    name: error.name,
+    stack: error.stack,
+  };
+  res.status(500).send(simpleError)
 });
 
 const PORT = 8000;
-server.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// quit on ctrl-c when running docker in terminal
+process.on("SIGINT", function onSigint() {
+  console.info("Got SIGINT (aka ctrl-c in docker). Graceful shutdown ", new Date().toISOString())
+  shutdown()
+})
+
+// quit properly on docker stop
+process.on("SIGTERM", function () {
+  console.info("Got SIGTERM (docker container stop). Graceful shutdown ", new Date().toISOString())
+  shutdown()
+})
+
+// shut down server
+function shutdown() {
+  server.close()
+}

@@ -9,5 +9,5 @@
 coverage
 *.log
 
-/src/data/*.sqlite
-src/downloads/*
+data/*.sqlite
+downloads/*

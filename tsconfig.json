@@ -1,4 +1,9 @@
 {
+  "ts-node": {
+    // for some reason theres a shit ton of type errors even though there aren't really any in the source code
+    "transpileOnly": true,
+    "files": true,
+  },
   "compilerOptions": {
     "target": "es6",
     "module": "commonjs",

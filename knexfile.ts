@@ -2,6 +2,10 @@ import {Knex} from "knex";
 import path from "path";
 
 const SPATIALITE_PATH = process.env.SPATIALITE_EXTENSION_PATH || 'mod_spatialite'
+console.log('Using Spatialite extension at:', SPATIALITE_PATH);
+
+import SegFaultHandler from 'segfault-handler';
+SegFaultHandler.registerHandler('crash.log');
 
 export default {
   client: 'sqlite3',
@@ -10,7 +14,7 @@ export default {
   },
   useNullAsDefault: true,
   migrations: {
-    directory: './migrations'
+    directory: path.resolve(__dirname, './migrations')
   },
   pool: {
     afterCreate: (conn, done) => {
