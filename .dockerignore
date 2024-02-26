@@ -1,5 +1,5 @@
 # Include .gitignore rules
 .gitignore
-src/data/*.sqlite
 src/downloads
 node_modules
+dist/

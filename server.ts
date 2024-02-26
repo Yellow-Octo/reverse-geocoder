@@ -45,8 +45,14 @@ export const server = http.createServer(async (req, res) => {
       res.writeHead(200, {'Content-Type': 'application/json'});
       return res.end(JSON.stringify(result));
     } catch (error) {
-      res.writeHead(500, {'Content-Type': 'text/plain'});
-      return res.end('Internal Server Error');
+      const simpleError = {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+        // add other properties if needed
+      };
+      res.writeHead(500, {'Content-Type': 'application/json'});
+      return res.end(JSON.stringify(simpleError));
     }
   }
 

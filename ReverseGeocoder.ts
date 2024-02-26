@@ -12,6 +12,7 @@ import {isLanguageCode} from "./helpers/isLanguageCode";
 import {inferSchema, initParser, Parser} from "udsv";
 import {unzipSpecificFile} from "./helpers/unzipper";
 import * as fs from "fs";
+import {ALTERNATE_HEADERS} from "./helpers/constants";
 
 const BATCH_SIZE = 400
 
@@ -150,7 +151,7 @@ FROM (SELECT *
     }
     await this.loadCityZip(citiesStream.pipe(new ProgressBarStream(citiesSize)))
 
-    if(alternateNamesRemote || alternateNamesLocal){
+    if (alternateNamesRemote || alternateNamesLocal) {
       await this.downloadAlternateNames()
     }
   }
@@ -248,8 +249,7 @@ FROM (SELECT *
       stream
         .pipe(parse({
           delimiter: "\t",
-          headers: ["alternateNameId", "geonameid", "isolanguage", "alternateName", "isPreferredName", "isShortName",
-            "isColloquial", "isHistoric"],
+          headers: ALTERNATE_HEADERS,
         }))
         .pipe(new BatchStream(BATCH_SIZE, {objectMode: true}))
         .pipe(new AsyncWorkStream<AlternateNameType[]>(async (batch) => {

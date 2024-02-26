@@ -14,8 +14,8 @@
   "types": "./dist/main.d.ts",
   "scripts": {
     "refresh": "yarn rollback && yarn migrate",
-    "rollback": "npx knex migrate:rollback --all --knexfile src/knexfile",
-    "migrate": "npx knex migrate:latest --knexfile src/knexfile",
+    "rollback": "npx knex migrate:rollback --all",
+    "migrate": "npx knex migrate:latest",
     "lint": "eslint src/ --ext .js,.jsx,.ts,.tsx",
     "test": "jest",
     "clean": "rm -rf dist build package",
@@ -37,6 +37,7 @@
   "dependencies": {
     "fast-csv": "^5.0.1",
     "knex": "^3.1.0",
+    "segfault-handler": "^1.3.0",
     "sqlite3": "^5.1.7",
     "typescript": "^4.6.3",
     "udsv": "^0.5.3",
