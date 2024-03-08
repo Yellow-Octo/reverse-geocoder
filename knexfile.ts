@@ -1,32 +1,26 @@
 import {Knex} from "knex";
 import path from "path";
 
-const SPATIALITE_PATH = process.env.SPATIALITE_EXTENSION_PATH || 'mod_spatialite'
-console.log('Using Spatialite extension at:', SPATIALITE_PATH);
-
-import SegFaultHandler from 'segfault-handler';
-SegFaultHandler.registerHandler('crash.log');
+const migrationPath = path.resolve(__dirname, './migrations')
 
 export default {
-  client: 'sqlite3',
+  client: "pg",
   connection: {
-    filename: path.resolve(__dirname, "./data/db.sqlite")
-  },
-  useNullAsDefault: true,
-  migrations: {
-    directory: path.resolve(__dirname, './migrations')
+    port: process.env.DB_PORT,
+    host: "postgres",
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    multipleStatements: true,
   },
   pool: {
-    afterCreate: (conn, done) => {
-      conn.loadExtension(SPATIALITE_PATH, (err: Error) => {
-        if (!err) {
-          console.log('Spatialite extension loaded');
-          return done(null, conn);
-        }
-
-        console.error('Failed to load Spatialite extension:', err);
-        done(err, conn);
-      });
-    }
-  }
+    min: 1,
+    max: 5,
+  },
+  migrations: {
+    directory: migrationPath,
+    tableName: "knex_migrations",
+    extension: "ts",
+  },
+  debug: false,
 } as Knex.Config

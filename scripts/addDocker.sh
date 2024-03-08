@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# This file is to let us easily add packages to the docker container instead of installing locally.
+# this allows us to install via IE:
+# yarn addDc -D package-name
+
 # check if there are no parameters
 if [ -z "$1" ]
   then

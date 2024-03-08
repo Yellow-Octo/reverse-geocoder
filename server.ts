@@ -1,14 +1,11 @@
 import express from "express";
 import {ReverseGeocoder} from "./ReverseGeocoder";
 import {isValidLat, isValidLng} from "./helpers/isValidCoordinate";
-import {Database} from "./Database";
+import { CityInsertType } from "./types/types";
 
 const app = express();
 const geocoder = new ReverseGeocoder();
 
-app.get("/throw", (req, res) => {
-  throw new Error("This is a forced error");
-})
 app.get('/reverse', async (req, res) => {
   const lat = req.query.lat;
   const lng = req.query.lng;
@@ -26,23 +23,20 @@ app.get('/reverse', async (req, res) => {
   if (!isValidLat(latFloat) || !isValidLng(lngFloat)) {
     return res.status(400).send('Invalid lat or lng');
   }
-  let result;
+  let result: CityInsertType | null;
   if (languageCode) {
     result = await geocoder.searchWithLanguage(latFloat, lngFloat, languageCode as string, false);
   } else {
-    result = await geocoder.searchRepeatedly(latFloat, lngFloat);
+    result = await geocoder.search(latFloat, lngFloat);
   }
   return res.json(result);
 });
 
-app.get('/download', async (req, res) => {
-  await Database.rollbackAll();
-  await Database.latestMigrations();
-  await geocoder.downloadData();
-  res.status(200).send('All data downloaded');
+app.get('/health', (_req, res) => {
+  res.status(200).send('ok');
 });
 
-app.use((error: Error, req, res) => {
+app.use((error: Error, _req, res, _next) => {
   const simpleError = {
     message: error.message,
     name: error.name,
@@ -51,7 +45,7 @@ app.use((error: Error, req, res) => {
   res.status(500).send(simpleError)
 });
 
-const PORT = 8000;
+const PORT = process.env.NODE_PORT
 const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

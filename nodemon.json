@@ -1,0 +1,19 @@
+{
+  "restartable": "rs",
+  "ignore": [
+    ".git",
+    ".github",
+    ".idea",
+    ".run",
+    ".vscode",
+    "volumes/",
+    "migrations/",
+    "node_modules/",
+    "dist/"
+  ],
+  "watch": ["./"],
+  "execMap": {
+    "ts": "node -r ts-node/register"
+  },
+  "ext": "js,json,ts"
+}

@@ -1,0 +1,68 @@
+version: "3.9"
+# versions no longer needed for compose CLI use (as of 2020)
+# If using swarm, you'll still need version 3.9
+
+# extension fields ignored by docker but to set shared variables
+x-common-variables: &common
+  # we unfortunately have to duplicate the server_port(_full) numbers since we can't concatenate strings or do anything fancy
+  # inside a yaml
+  server_port: &server_port 8000
+  server_port_full: &server_port_full 8000:8000
+  db_host: &db_host postgres
+  db_user: &db_user postgres
+  db_password: &db_password postgres
+  db_name: &db_name reverse_geocoder
+  db_port: &db_port 5432
+  db_port_full: &db_port_full 5432:5432
+
+services:
+  postgres:
+    container_name: geocoder-postgres
+    image: postgis/postgis:latest
+    ports:
+      - *db_port_full
+    environment:
+      POSTGRES_USER: *db_user
+      POSTGRES_PASSWORD: *db_password
+      POSTGRES_DB: *db_name
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+  node:
+    container_name: geocoder-node
+    build:
+      context: .
+      args:
+        - NODE_ENV=dev
+    command: /code/node_modules/.bin/nodemon --config /code/inside/nodemon.json --inspect=0.0.0.0:9229 server.ts
+    working_dir: /code/inside/
+    ports:
+      - *server_port_full
+      - "9229:9229"
+      - "9230:9230"
+    volumes:
+      - ./:/code/inside/
+      - ./package.json:/code/package.json
+      - ./yarn.lock:/yarn.lock
+
+      # trick to allow laptop node_modules to be installed for code completion, tests, but also not rewrite
+      # the container's node_modules (which is built specifically for linux and might not be the same for
+      # local mac/win OS
+      - notused:/code/inside/node_modules/
+    environment:
+      NODE_ENV: dev
+      NODE_PORT: *server_port
+      DB_HOST: *db_host
+      DB_USER: *db_user
+      DB_PASSWORD: *db_password
+      DB_NAME: *db_name
+      DB_NAME_TEST: *db_name
+      DB_PORT: *db_port
+      DB_PORT_FULL: *db_port_full
+    depends_on:
+      - postgres
+    healthcheck:
+      disable: true
+volumes:
+  postgres:
+  notused:

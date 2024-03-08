@@ -22,12 +22,11 @@ export async function unzipSpecificFile(archivePath: string, filePathWithinArchi
     const finalDestinationPath = filePathWithinArchive ? destinationPath : destinationDir;
     const command = buildUnzipCommand(archivePath, filePathWithinArchive, finalDestinationPath);
 
-    exec(command, (error, stdout, stderr) => {
+    exec(command, (error, _stdout, stderr) => {
       if (error) {
         console.error(`Error: ${stderr}`);
         return reject(error);
       }
-      console.log(`Output: ${stdout}`);
       resolve();
     });
   });
