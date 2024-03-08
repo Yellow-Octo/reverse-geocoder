@@ -11,6 +11,11 @@ const server = http.createServer(async (req, res) => {
     const path = url.pathname;
     const params = url.searchParams;
 
+    if (path === "/") {
+      res.statusCode = 200;
+      return res.end('Reverse Geocoder API');
+    }
+
     if (path === '/reverse') {
       const lat = params.get('lat');
       const lng = params.get('lng');
@@ -53,7 +58,7 @@ server.on('error', (err) => {
   console.error('Server error:', err);
 });
 
-const PORT = process.env.NODE_PORT;
+const PORT = process.env.NODE_PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

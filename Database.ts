@@ -1,7 +1,7 @@
 import Knex from "knex"
 import knexfile from "./knexfile";
 
-export const knexInstance = Knex(knexfile)
+export const knexInstance = Knex(knexfile[process.env.NODE_ENV || "dev"])
 
 export class Database {
 
