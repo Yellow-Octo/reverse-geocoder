@@ -40,20 +40,19 @@ export class ReverseGeocoder {
   }
 
   search = async (lat: number, lng: number) => {
-    const result = await knexInstance.raw(`SELECT
-    cities."name"           AS "name",
-    cities."countryCode"    AS "country",
-    cities."geoNameId"      AS "geoNameId",
-    admin1."name"           AS "admin1",
-    admin2."name"           AS "admin2"
-FROM cities
-         LEFT JOIN admin1
-                   ON cities."countryCode" || '.' || cities."admin1Code" = admin1."id"
-         LEFT JOIN admin2
-                   ON cities."countryCode" || '.' || cities."admin1Code" || '.' || cities."admin2Code" = admin2."id"
-ORDER BY cities."point" <-> ST_SetSRID(ST_MakePoint(?,?), 4326)
-LIMIT 1;`, [lng, lat]);
+    const result = await knexInstance('cities')
+      .select({
+        name: 'cities.name',
+        country: 'cities.countryCode',
+        geoNameId: 'cities.geoNameId',
+        admin1: 'admin1.name',
+        admin2: 'admin2.name'
+      })
+      .leftJoin('admin1', knexInstance.raw(`cities."countryCode" || '.' || cities."admin1Code" = admin1."id"`))
+      .leftJoin('admin2', knexInstance.raw(`cities."countryCode" || '.' || cities."admin1Code" || '.' || cities."admin2Code" = admin2."id"`))
+      .orderByRaw('cities."point" <-> ST_SetSRID(ST_MakePoint(?, ?), 4326)', [lng, lat])
+      .limit(1);
 
-    return result.rows[0] || null;
+    return result[0] || null;
   }
 }
