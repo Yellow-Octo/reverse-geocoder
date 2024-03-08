@@ -1,7 +1,7 @@
 import http from 'http';
-import { ReverseGeocoder } from "./ReverseGeocoder";
-import { isValidLat, isValidLng } from "./helpers/isValidCoordinate";
-import { CityInsertType } from "./types/types";
+import {ReverseGeocoder} from "./ReverseGeocoder";
+import {isValidLat, isValidLng} from "./helpers/isValidCoordinate";
+import {CityInsertType} from "./types/types";
 
 const geocoder = new ReverseGeocoder();
 
@@ -17,16 +17,19 @@ const server = http.createServer(async (req, res) => {
       const languageCode = params.get('language');
 
       if (!lat || !lng) {
-        return res.statusCode = 400, res.end('Missing query parameters: lat, lng, or language');
+        res.statusCode = 400
+        return res.end('Missing query parameters: lat, lng, or language');
       }
 
       const latFloat = parseFloat(lat);
       const lngFloat = parseFloat(lng);
       if (isNaN(latFloat) || isNaN(lngFloat)) {
-        return res.statusCode = 400, res.end('Invalid lat or lng');
+        res.statusCode = 400
+        return res.end('Invalid lat or lng');
       }
       if (!isValidLat(latFloat) || !isValidLng(lngFloat)) {
-        return res.statusCode = 400, res.end('Invalid lat or lng');
+        res.statusCode = 400
+        return res.end('Invalid lat or lng');
       }
       let result: CityInsertType | null;
       if (languageCode) {
@@ -36,19 +39,14 @@ const server = http.createServer(async (req, res) => {
       }
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(result));
+      return res.end(JSON.stringify(result));
     } else if (path === '/health') {
       res.statusCode = 200;
-      res.end('ok');
-    } else {
-      res.statusCode = 404;
-      res.end('Not found');
+      return res.end('ok');
     }
-  } else {
-    res.statusCode = 404;
-    res.end('Not found');
   }
-  return
+  res.statusCode = 404;
+  return res.end('Not found');
 });
 
 server.on('error', (err) => {
