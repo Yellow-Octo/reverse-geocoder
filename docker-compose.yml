@@ -19,8 +19,8 @@ services:
   postgres:
     container_name: geocoder-postgres
     image: postgis/postgis:latest
-    ports:
-      - *db_port_full
+#    ports:
+#      - *db_port_full
     environment:
       POSTGRES_USER: *db_user
       POSTGRES_PASSWORD: *db_password
