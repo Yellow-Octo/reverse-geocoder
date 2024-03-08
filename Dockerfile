@@ -33,7 +33,6 @@ ENV NODE_ENV $NODE_ENV
 
 WORKDIR /code/inside/
 COPY --chown=node:node . .
-RUN yarn run build
 
 # The CMD instruction sets the default command to execute when the container starts.
 # Here, we use 'node' to directly run the server script. This approach is typically
