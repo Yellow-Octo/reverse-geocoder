@@ -1,52 +1,62 @@
-import express from "express";
-import {ReverseGeocoder} from "./ReverseGeocoder";
-import {isValidLat, isValidLng} from "./helpers/isValidCoordinate";
+import http from 'http';
+import { ReverseGeocoder } from "./ReverseGeocoder";
+import { isValidLat, isValidLng } from "./helpers/isValidCoordinate";
 import { CityInsertType } from "./types/types";
 
-const app = express();
 const geocoder = new ReverseGeocoder();
 
-app.get('/reverse', async (req, res) => {
-  const lat = req.query.lat;
-  const lng = req.query.lng;
-  const languageCode = req.query.language;
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'GET' && req.url) {
+    const url = new URL(`http://localhost${req.url}`);
+    const path = url.pathname;
+    const params = url.searchParams;
 
-  if (lat === null || lng === null) {
-    return res.status(400).send('Missing query parameters: lat, lng, or language');
-  }
+    if (path === '/reverse') {
+      const lat = params.get('lat');
+      const lng = params.get('lng');
+      const languageCode = params.get('language');
 
-  const latFloat = parseFloat(lat as string);
-  const lngFloat = parseFloat(lng as string);
-  if (isNaN(latFloat) || isNaN(lngFloat)) {
-    return res.status(400).send('Invalid lat or lng');
-  }
-  if (!isValidLat(latFloat) || !isValidLng(lngFloat)) {
-    return res.status(400).send('Invalid lat or lng');
-  }
-  let result: CityInsertType | null;
-  if (languageCode) {
-    result = await geocoder.searchWithLanguage(latFloat, lngFloat, languageCode as string, false);
+      if (!lat || !lng) {
+        return res.statusCode = 400, res.end('Missing query parameters: lat, lng, or language');
+      }
+
+      const latFloat = parseFloat(lat);
+      const lngFloat = parseFloat(lng);
+      if (isNaN(latFloat) || isNaN(lngFloat)) {
+        return res.statusCode = 400, res.end('Invalid lat or lng');
+      }
+      if (!isValidLat(latFloat) || !isValidLng(lngFloat)) {
+        return res.statusCode = 400, res.end('Invalid lat or lng');
+      }
+      let result: CityInsertType | null;
+      if (languageCode) {
+        result = await geocoder.searchWithLanguage(latFloat, lngFloat, languageCode, false);
+      } else {
+        result = await geocoder.search(latFloat, lngFloat);
+      }
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(result));
+    } else if (path === '/health') {
+      res.statusCode = 200;
+      res.end('ok');
+    } else {
+      res.statusCode = 404;
+      res.end('Not found');
+    }
   } else {
-    result = await geocoder.search(latFloat, lngFloat);
+    res.statusCode = 404;
+    res.end('Not found');
   }
-  return res.json(result);
+  return
 });
 
-app.get('/health', (_req, res) => {
-  res.status(200).send('ok');
+server.on('error', (err) => {
+  console.error('Server error:', err);
 });
 
-app.use((error: Error, _req, res, _next) => {
-  const simpleError = {
-    message: error.message,
-    name: error.name,
-    stack: error.stack,
-  };
-  res.status(500).send(simpleError)
-});
-
-const PORT = process.env.NODE_PORT
-const server = app.listen(PORT, () => {
+const PORT = process.env.NODE_PORT;
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
 
