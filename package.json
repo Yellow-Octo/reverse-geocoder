@@ -15,7 +15,7 @@
   "scripts": {
     "addDc": "./scripts/addDocker.sh",
     "removeDc": "./scripts/removeDocker.sh",
-    "seedLocal": "ts-node scripts/seed.ts",
+    "seedLocal": "npx ts-node scripts/seed.ts",
     "seed": "docker-compose exec node yarn seedLocal",
     "refreshLocal": "npx knex migrate:rollback --all && npx knex migrate:latest",
     "refresh": "docker-compose exec node yarn refreshLocal",

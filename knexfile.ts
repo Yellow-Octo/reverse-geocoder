@@ -31,6 +31,11 @@ export default {
     pool: {
       min: 1,
       max: 5,
+      createTimeoutMillis: 3000,
+      acquireTimeoutMillis: 30000,
+      idleTimeoutMillis: 30000,
+      reapIntervalMillis: 1000,
+      createRetryIntervalMillis: 200,
     },
     migrations: {
       directory: migrationPath,

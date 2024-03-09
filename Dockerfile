@@ -46,4 +46,4 @@ COPY --chown=node:node . .
 # tends to handle signal propagation more gracefully. Ensuring proper signal handling is important
 # for tasks like closing database connections and cleaning up resources before the container stops.
 
-CMD [ "ts-node", "./server.ts" ]
+CMD [ "../node_modules/.bin/ts-node", "./server.ts" ]
